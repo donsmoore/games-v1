@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F-16 Flight Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+</head>
+
+<body>
+    <div id="ui">
+        <div id="instructions">
+            Pitch: W/S | Roll: A/D<br>
+            Throttle: Up/Down Arrows | Rudder: Left/Right Arrows<br>
+            R: Reset
+        </div>
+        <div id="speedometer">Speed: 0 km/h</div>
+        <div id="altitude">Alt: 0 m</div>
+    </div>
+    <script type="module" src="js/game.js?v=17"></script>
+</body>
+
+</html>

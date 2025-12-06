@@ -1,0 +1,26 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #87CEEB; /* Sky blue fallback */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+canvas {
+    display: block;
+}
+
+#ui {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+    user-select: none;
+}
+
+#speedometer, #altitude {
+    margin-top: 5px;
+    font-size: 1.2em;
+    font-weight: bold;
+}
