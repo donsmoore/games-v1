@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function getHeight(x, z) {
     // Bias height up so most is land (above -2).
@@ -8,10 +9,11 @@ export function getHeight(x, z) {
 }
 
 export class TerrainManager {
-    constructor(scene, treeModel, runwayTexture) {
+    constructor(scene, treeModel, runwayTexture, roundTreeModel) {
         this.scene = scene;
         this.treeModel = treeModel;
         this.runwayTexture = runwayTexture;
+        this.roundTreeModel = roundTreeModel; // Store new model
         this.chunks = {};
         this.chunkSize = 1000;
         this.currentChunk = { x: Infinity, z: Infinity };
@@ -39,7 +41,7 @@ export class TerrainManager {
                 const key = `${x},${z}`;
                 keepKeys.add(key);
                 if (!this.chunks[key]) {
-                    this.chunks[key] = new Chunk(x, z, this.chunkSize, this.scene, this.treeModel, this.runwayTexture);
+                    this.chunks[key] = new Chunk(x, z, this.chunkSize, this.scene, this.treeModel, this.runwayTexture, this.roundTreeModel);
                 }
             }
         }
@@ -70,11 +72,22 @@ export class TerrainManager {
         }
         return runways;
     }
+
+    getMountains() {
+        const mountains = [];
+        for (const key in this.chunks) {
+            if (this.chunks[key].mountain) mountains.push(this.chunks[key].mountain);
+        }
+        return mountains;
+    }
 }
 
 class Chunk {
-    constructor(cx, cz, size, scene, treeModel, runwayTexture) {
+    constructor(cx, cz, size, scene, treeModel, runwayTexture, roundTreeModel) {
         this.scene = scene;
+        this.treeModel = treeModel;
+        this.runwayTexture = runwayTexture;
+        this.roundTreeModel = roundTreeModel;
         this.trees = [];
         this.runways = [];
         this.mesh = null;
@@ -170,12 +183,26 @@ class Chunk {
 
                 const ty = getHeight(tx, tz);
                 if (ty > -1) {
-                    const tree = treeModel.clone();
+                    // Random Tree Type
+                    let tree;
+                    // Check if roundTreeModel exists (Chunk constructor update needed to pass it)
+                    // We need to update Chunk constructor first.
+                    // Assuming this.roundTreeModel is available on the Chunk instance
+                    // Wait, I need to update the constructor signature below.
+                    // For now, let's assume it's passed.
+
+                    if (this.roundTreeModel && Math.random() > 0.5) {
+                        tree = this.roundTreeModel.clone();
+                    } else {
+                        tree = this.treeModel.clone();
+                    }
+
                     tree.position.set(tx, ty, tz);
 
-                    // Scale: Base 1.0 (OBJ is 10x baked)
-                    const s = 1.0 * (0.5 + Math.random() * 0.5);
-                    tree.scale.set(s, s, s);
+                    // Scale: Random multiplier (0.5 to 1.0)
+                    // Use multiplyScalar to preserve the model's base scale
+                    const s = 0.5 + Math.random() * 0.5;
+                    tree.scale.multiplyScalar(s);
 
                     scene.add(tree);
                     this.trees.push(tree);
@@ -186,35 +213,50 @@ class Chunk {
         // 3. Runway (One per chunk)
         if (runwayTexture) {
             const rwGeo = new THREE.BoxGeometry(20, 30, 100);
-            // ... vertex flaring logic ...
+
+            // Apply vertex flaring logic BEFORE rotation/translation
+            // Flare the bottom 100% more (2.5x width at base)
             const pos = rwGeo.attributes.position;
             for (let i = 0; i < pos.count; i++) {
                 const y = pos.getY(i);
                 if (y < 0) {
-                    pos.setX(i, pos.getX(i) * 1.5);
-                    pos.setZ(i, pos.getZ(i) * 1.1);
+                    pos.setX(i, pos.getX(i) * 2.5); // 100% more flare (was 1.5)
+                    pos.setZ(i, pos.getZ(i) * 1.2);
                 }
             }
             rwGeo.computeVertexNormals();
 
             const topMat = new THREE.MeshLambertMaterial({ map: runwayTexture });
-            const sideMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const sideMat = new THREE.MeshLambertMaterial({ color: 0x111111 }); // Black
             const mats = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
 
             const runway = new THREE.Mesh(rwGeo, mats);
 
-            // Position
-            // Center of chunk: cx*size, cz*size
-            // Height: Find max height in this area?
-            // Simplification: Check center height or a few points.
-            // Let's stick to center.
-            const rX = cx * size;
-            const rZ = cz * size;
+            // Calculate Random Position
+            // Center of chunk: cx * size, cz * size
+            // Offset: 10% to 30% of size (size = 1000 => 100 to 300)
+            const minOffset = size * 0.10;
+            const maxOffset = size * 0.30;
+            const offsetDist = minOffset + Math.random() * (maxOffset - minOffset);
+            const offsetAngle = Math.random() * Math.PI * 2;
 
+            const offsetX = Math.cos(offsetAngle) * offsetDist;
+            const offsetZ = Math.sin(offsetAngle) * offsetDist;
+
+            const rX = cx * size + offsetX;
+            const rZ = cz * size + offsetZ;
+
+            // Calculate Random Rotation
+            const rotY = Math.random() * Math.PI * 2;
+            runway.rotation.y = rotY;
+
+            // Height Calculation
             let maxH = -Infinity;
-            // Scan area where runway will be (20x100)
-            for (let dx = -10; dx <= 10; dx += 10) {
-                for (let dz = -50; dz <= 50; dz += 10) {
+            // Scan area in LOCAL space to cover the rotated runway footprint
+            // Bounding radius is approx sqrt(10^2 + 50^2) ~= 51
+            // Let's scan a safe radius around rX, rZ
+            for (let dx = -60; dx <= 60; dx += 20) {
+                for (let dz = -60; dz <= 60; dz += 20) {
                     const h = getHeight(rX + dx, rZ + dz);
                     if (h > maxH) maxH = h;
                 }
@@ -223,22 +265,176 @@ class Chunk {
 
             runway.position.set(rX, rY - 15, rZ); // -15 because height is 30, center at 0
             runway.receiveShadow = true;
+            runway.updateMatrixWorld(true); // Ensure world matrix is up to date
 
             scene.add(runway);
-            this.runways.push(runway); // Store for disposal and minimap
+            this.runways.push(runway);
 
-            // Clear trees in runway area?
-            // We already generated trees.
-            // Maybe remove trees that are too close to runway?
-            // Iterate this.trees and remove if close.
+            // Clear trees in runway area
+            // Use OBB (Oriented Bounding Box) logic or simple safe radius
+            // Safe radius: 60 units
             for (let i = this.trees.length - 1; i >= 0; i--) {
                 const t = this.trees[i];
                 const dx = t.position.x - rX;
                 const dz = t.position.z - rZ;
-                if (Math.abs(dx) < 30 && Math.abs(dz) < 80) {
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < 80) { // slightly larger than safe scan to be sure
                     scene.remove(t);
                     this.trees.splice(i, 1);
                 }
+            }
+        }
+
+        // 4. Mountain Range (One per chunk with 3-5 peaks)
+        // Random position within chunk (avoiding center where runway might be)
+        const mOffsetAngle = Math.random() * Math.PI * 2;
+        const mOffsetDist = size * 0.3 + Math.random() * size * 0.15; // 30-45% from center
+        const mX = cx * size + Math.cos(mOffsetAngle) * mOffsetDist;
+        const mZ = cz * size + Math.sin(mOffsetAngle) * mOffsetDist;
+        const mBaseY = getHeight(mX, mZ);
+
+        // Multi-Peak Mountain using merged geometries
+        const numPeaks = 3 + Math.floor(Math.random() * 3); // 3-5 peaks
+        const mergedGeometries = [];
+
+        // Ground color (green/brown like terrain)
+        const groundColor = new THREE.Color(0x3b7d3b); // Green base
+        const snowColor = new THREE.Color(0xFFFFFF); // White snow
+
+        let maxRadius = 0;
+
+        for (let p = 0; p < numPeaks; p++) {
+            // Each peak has slightly different size and position
+            const peakHeight = 60 + Math.random() * 100; // 60-160 units tall
+            const peakRadius = 40 + Math.random() * 30; // 40-70 units radius
+            maxRadius = Math.max(maxRadius, peakRadius);
+
+            // Offset each peak from center (first peak at center)
+            const peakOffsetDist = p === 0 ? 0 : 20 + Math.random() * 40;
+            const peakOffsetAngle = Math.random() * Math.PI * 2;
+            const peakX = peakOffsetDist * Math.cos(peakOffsetAngle);
+            const peakZ = peakOffsetDist * Math.sin(peakOffsetAngle);
+
+            // Create cone geometry
+            const radialSegments = 8;
+            const heightSegments = 5;
+            const peakGeo = new THREE.ConeGeometry(peakRadius, peakHeight, radialSegments, heightSegments);
+
+            // Add vertex colors for snow gradient
+            const peakPositions = peakGeo.attributes.position;
+            const peakColors = [];
+
+            for (let i = 0; i < peakPositions.count; i++) {
+                const y = peakPositions.getY(i);
+                // Height factor: 0 at base, 1 at top
+                const heightFactor = (y + peakHeight / 2) / peakHeight;
+
+                // Snow starts at 75% height, fully white at top
+                let color = groundColor.clone();
+                if (heightFactor > 0.75) {
+                    const snowFactor = (heightFactor - 0.75) / 0.25; // 0 to 1 in top 25%
+                    color.lerp(snowColor, snowFactor);
+                }
+
+                peakColors.push(color.r, color.g, color.b);
+
+                // Get current vertex position
+                const x = peakPositions.getX(i);
+                const z = peakPositions.getZ(i);
+
+                // Base flaring: expand lower half to ~1.4x radius (doubles surface area)
+                // Flare factor: 1.4 at base, 1.0 at 50% height, 1.0 above
+                let flareFactor = 1.0;
+                if (heightFactor < 0.5) {
+                    // Linear flare from 1.4 at bottom to 1.0 at midpoint
+                    flareFactor = 1.4 - (heightFactor / 0.5) * 0.4;
+                }
+
+                // Add slight random displacement for natural look
+                let expansion = flareFactor;
+                if (heightFactor < 0.9 && heightFactor > 0.1) {
+                    expansion *= 1 + (Math.random() - 0.5) * 0.2;
+                    const noise = (Math.random() - 0.5) * 8;
+                    peakPositions.setY(i, y + noise);
+                }
+
+                peakPositions.setX(i, x * expansion);
+                peakPositions.setZ(i, z * expansion);
+            }
+
+            peakGeo.setAttribute('color', new THREE.Float32BufferAttribute(peakColors, 3));
+
+            // Translate peak to its position
+            peakGeo.translate(peakX, peakHeight / 2, peakZ);
+
+            peakGeo.computeVertexNormals();
+            mergedGeometries.push(peakGeo);
+        }
+
+        // Merge all peak geometries
+        const mountainGeo = BufferGeometryUtils.mergeGeometries(mergedGeometries, false);
+
+        const mountainMat = new THREE.MeshLambertMaterial({
+            vertexColors: true,
+            flatShading: true
+        });
+
+        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+        mountain.position.set(mX, mBaseY, mZ);
+        mountain.castShadow = true;
+        mountain.receiveShadow = true;
+
+        // Store collision data (account for flared base: 1.4x maxRadius)
+        mountain.userData.baseRadius = maxRadius * 1.4; // Just the flared peak radius
+        mountain.userData.maxHeight = 160; // Max possible peak height
+
+        scene.add(mountain);
+        this.mountain = mountain;
+
+        // Clear trees near mountain
+        for (let i = this.trees.length - 1; i >= 0; i--) {
+            const t = this.trees[i];
+            const dx = t.position.x - mX;
+            const dz = t.position.z - mZ;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist < maxRadius + 40) { // Clear trees within mountain range radius
+                scene.remove(t);
+                this.trees.splice(i, 1);
+            }
+        }
+
+        // 5. Add pine trees around mountain range (10-15 trees)
+        // Place trees OUTSIDE the mountain base, on the surrounding ground
+        if (this.treeModel) {
+            const numTrees = 10 + Math.floor(Math.random() * 6); // 10-15
+
+            // Use stored baseRadius for consistency
+            const treeRadius = mountain.userData.baseRadius || maxRadius * 1.4;
+
+            // Place trees around the outer edge of the mountain
+            for (let i = 0; i < numTrees; i++) {
+                const treeAngle = Math.random() * Math.PI * 2;
+                // Place at 100-130% of the mountain's base radius (outside the collision zone)
+                const treeDist = treeRadius * (1.0 + Math.random() * 0.3);
+                const tX = mX + Math.cos(treeAngle) * treeDist;
+                const tZ = mZ + Math.sin(treeAngle) * treeDist;
+                const tY = getHeight(tX, tZ);
+
+                // Skip if underwater
+                if (tY < -1) continue;
+
+                // Pine trees only
+                const tree = this.treeModel.clone();
+
+                tree.position.set(tX, tY, tZ);
+
+                // Random scale (0.5-1.0)
+                const s = 0.5 + Math.random() * 0.5;
+                tree.scale.multiplyScalar(s);
+
+                scene.add(tree);
+                this.trees.push(tree);
             }
         }
     }
@@ -262,5 +458,13 @@ class Chunk {
             else r.material.dispose();
         }
         this.runways = [];
+
+        // Dispose mountain
+        if (this.mountain) {
+            this.scene.remove(this.mountain);
+            this.mountain.geometry.dispose();
+            this.mountain.material.dispose();
+            this.mountain = null;
+        }
     }
 }

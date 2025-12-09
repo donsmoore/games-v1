@@ -1,7 +1,8 @@
 body {
     margin: 0;
     overflow: hidden;
-    background-color: #87CEEB; /* Sky blue fallback */
+    background-color: #87CEEB;
+    /* Sky blue fallback */
     font-family: 'Courier New', Courier, monospace;
 }
 
@@ -9,18 +10,124 @@ canvas {
     display: block;
 }
 
-#ui {
+/* HUD Layout */
+#hud-container {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    color: white;
-    text-shadow: 1px 1px 2px black;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-family: 'Consolas', 'Monaco', monospace;
     pointer-events: none;
-    user-select: none;
+    /* Let clicks pass through */
 }
 
-#speedometer, #altitude {
-    margin-top: 5px;
-    font-size: 1.2em;
+#stats-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    pointer-events: none;
+}
+
+.hud-box {
+    background-color: rgba(40, 40, 40, 0.85);
+    /* Dark Grey */
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 10px;
+    color: #ddd;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.grid-title {
+    text-align: center;
+    border-bottom: 1px solid #555;
+    margin-bottom: 5px;
+    padding-bottom: 2px;
     font-weight: bold;
+    color: #fff;
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 15px;
+    font-size: 0.9em;
+}
+
+.control-grid div:nth-child(odd) {
+    color: #aaa;
+    text-align: right;
+}
+
+.control-grid div:nth-child(even) {
+    color: #fff;
+    font-weight: bold;
+    text-align: left;
+}
+
+/* Stats Box */
+.stat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.stat-row:last-child {
+    margin-bottom: 0;
+}
+
+.stat-label {
+    width: 50px;
+    text-align: right;
+    font-weight: bold;
+    color: #aaa;
+}
+
+.progress-track {
+    width: 150px;
+    height: 10px;
+    background-color: #222;
+    border: 1px solid #444;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background-color: #00ff00;
+    transition: width 0.1s linear;
+}
+
+#speed-bar {
+    background-color: #00bcd4;
+    /* Cyan */
+}
+
+#alt-bar {
+    background-color: #ff9800;
+    /* Orange */
+}
+
+#laser-bar {
+    background-color: #e91e63;
+    /* Pink/Red */
+}
+
+.stat-val {
+    width: 80px;
+    text-align: left;
+    font-family: monospace;
+}
+
+/* Minimap Override */
+#minimap-container canvas {
+    border: 1px solid #555 !important;
+    border-radius: 0 !important;
+    /* Remove circle if we want box look, or keep? User said "left of mini map" implies distinct boxes. Let's keep circle or square? User said "grid to hold values". Let's make minimap square to match. */
+    background-color: rgba(0, 0, 0, 0.5) !important;
 }

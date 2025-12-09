@@ -18,16 +18,59 @@
 </head>
 
 <body>
-    <div id="ui">
-        <div id="instructions">
-            Pitch: W/S | Roll: A/D<br>
-            Throttle: Up/Down Arrows | Rudder: Left/Right Arrows<br>
-            R: Reset
+    <div id="stats-container">
+        <div class="hud-box" id="stats-box">
+            <div class="stat-row">
+                <span class="stat-label">SPEED</span>
+                <div class="progress-track">
+                    <div id="speed-bar" class="progress-fill"></div>
+                </div>
+                <span id="speed-val" class="stat-val">0 km/h</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">ALT</span>
+                <div class="progress-track">
+                    <div id="alt-bar" class="progress-fill"></div>
+                </div>
+                <span id="alt-val" class="stat-val">0 m</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">LASER</span>
+                <div class="progress-track">
+                    <div id="laser-bar" class="progress-fill"></div>
+                </div>
+                <span id="laser-val" class="stat-val">100%</span>
+            </div>
+            <div id="instructions" style="display:none"></div> <!-- Legacy hook for messages -->
         </div>
-        <div id="speedometer">Speed: 0 km/h</div>
-        <div id="altitude">Alt: 0 m</div>
     </div>
-    <script type="module" src="js/game.js?v=17"></script>
+
+    <div id="hud-container">
+        <div class="hud-box" id="controls-box">
+            <div class="grid-title">CONTROLS</div>
+            <div class="control-grid">
+                <div>PITCH</div>
+                <div>W / S</div>
+                <div>ROLL</div>
+                <div>A / D</div>
+                <div>YAW</div>
+                <div>&larr; / &rarr;</div>
+                <div>THRUST</div>
+                <div>&uarr; / &darr;</div>
+                <div>RESET</div>
+                <div>R</div>
+                <div>FIRE</div>
+                <div>SPACE</div>
+                <div>CAM</div>
+                <div>MOUSE</div>
+            </div>
+        </div>
+
+        <div class="hud-box" id="minimap-container">
+            <!-- Canvas injected here -->
+        </div>
+    </div>
+    <script type="module" src="js/game.js?v=66"></script>
 </body>
 
 </html>

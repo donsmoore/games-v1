@@ -28,7 +28,7 @@ export function getPlaneObject() {
 }
 
 
-export function updateControls(plane, delta) {
+export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 100) {
     if (!plane) return;
 
     // Throttle
@@ -56,7 +56,10 @@ export function updateControls(plane, delta) {
         plane.rotateX(delta * pitchSpeed);
     }
     if (keys.w) {
-        plane.rotateX(-delta * pitchSpeed);
+        // Only allow pitch down if we are safely above the ground (5m buffer)
+        if (plane.position.y > minAlt + 5.0) {
+            plane.rotateX(-delta * pitchSpeed);
+        }
     }
 
     // Roll (Ailerons) - A/D Only
@@ -78,9 +81,24 @@ export function updateControls(plane, delta) {
     // Move Forward (along local -Z)
     plane.translateZ(-planeSpeed * 40 * delta);
 
-    // Update UI
-    const speedometer = document.getElementById('speedometer');
-    if (speedometer) speedometer.innerText = `Speed: ${Math.round(planeSpeed * 800)} km/h`;
-    const altitudeDiv = document.getElementById('altitude');
-    if (altitudeDiv) altitudeDiv.innerText = `Alt: ${Math.round(plane.position.y)} m`;
+    // Update UI (Progress Bars)
+    const speedPct = Math.min(100, Math.max(0, (planeSpeed / MAX_SPEED) * 100));
+    const altVal = Math.max(0, plane.position.y);
+    const altPct = Math.min(100, Math.max(0, (altVal / 500) * 100));
+
+    const speedBar = document.getElementById('speed-bar');
+    const speedVal = document.getElementById('speed-val');
+    if (speedBar) speedBar.style.width = `${speedPct}%`;
+    if (speedVal) speedVal.innerText = `${Math.round(planeSpeed * 800)} km/h`;
+
+    const altBar = document.getElementById('alt-bar');
+    const altValText = document.getElementById('alt-val');
+    if (altBar) altBar.style.width = `${altPct}%`;
+    if (altValText) altValText.innerText = `${Math.round(altVal)} m`;
+
+    // Laser
+    const laserBar = document.getElementById('laser-bar');
+    const laserVal = document.getElementById('laser-val');
+    if (laserBar) laserBar.style.width = `${laserEnergy}%`;
+    if (laserVal) laserVal.innerText = `${Math.round(laserEnergy)}%`;
 }

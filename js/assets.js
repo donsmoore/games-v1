@@ -12,6 +12,11 @@ export function loadF16() {
                     child.castShadow = true;
                     child.receiveShadow = true;
 
+                    // Remove horizontal stabilizers (rear elevator)
+                    if (child.name === 'Stabilizers') {
+                        child.visible = false;
+                    }
+
                     // Apply Materials
                     if (child.name.includes('Cockpit')) {
                         child.material = new THREE.MeshPhongMaterial({
@@ -61,6 +66,45 @@ export function loadTree() {
             });
             resolve(group);
         });
+    });
+}
+
+// Procedural Round Tree
+export function loadRoundTree() {
+    return new Promise((resolve) => {
+        const group = new THREE.Group();
+
+        // 1. Trunk (Cylinder)
+        // Match approximate size of OBJ tree trunk
+        const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 3, 8);
+        trunkGeo.translate(0, 1.5, 0); // Base at 0
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+        trunk.name = 'Trunk';
+        group.add(trunk);
+
+        // 2. Leaves (Sphere)
+        const leavesGeo = new THREE.SphereGeometry(3.5, 8, 8); // Low poly look
+        leavesGeo.translate(0, 5, 0); // On top of trunk
+        const leavesMat = new THREE.MeshLambertMaterial({ color: 0x2E8B57 }); // SeaGreen
+        const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+        leaves.castShadow = true;
+        leaves.receiveShadow = true;
+        leaves.name = 'Leaves';
+        group.add(leaves);
+
+        // Tag for hitbox calculation
+        group.userData.treeType = 'round';
+        group.userData.baseRadius = 3.5;
+        group.userData.baseHeight = 8.5;
+
+        // Scale to match overall tree size logic
+        // Making round trees 50% smaller than before (was 10, now 5)
+        group.scale.set(5, 5, 5);
+
+        resolve(group);
     });
 }
 
