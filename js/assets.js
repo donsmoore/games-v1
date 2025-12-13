@@ -113,3 +113,41 @@ export function loadRunwayTexture() {
     // Placeholder - we will generate this image
     return loader.load('assets/runway.png');
 }
+
+export async function loadBuilding(type = 2) {
+    const map = { 2: 'building_2', 3: 'building_3', 5: 'building_5' };
+    const key = map[type] || 'building_2';
+    return new Promise((resolve) => {
+        loader.load(`assets/${key}.obj?v=` + Date.now(), (group) => {
+            group.traverse((child) => {
+                if (child.isMesh) {
+                    if (child.name.includes('BuildingBody')) {
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0xffffff,
+                            roughness: 0.85,
+                            metalness: 0.0
+                        });
+                    } else if (child.name.includes('Window')) {
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0x000000,
+                            roughness: 0.8,
+                            metalness: 0.0
+                        });
+                    }
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            // Compute base half extents for placement/collision
+            const box = new THREE.Box3().setFromObject(group);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            group.userData.baseHalfExtents = {
+                x: size.x * 0.5,
+                y: size.y * 0.5,
+                z: size.z * 0.5
+            };
+            resolve(group);
+        });
+    });
+}

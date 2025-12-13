@@ -222,6 +222,77 @@ function createTree() {
     return group;
 }
 
+function createBuilding(stories = 2, floorHeight = 4, width = 12, depth = 10) {
+    const group = new THREE.Group();
+    group.name = `Building_${stories}F`;
+
+    const height = stories * floorHeight;
+
+    // Body
+    const bodyGeo = new THREE.BoxGeometry(width, height, depth);
+    const bodyMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.name = 'BuildingBody';
+    body.position.y = height / 2;
+    group.add(body);
+
+    // Windows: 2 per side per floor -> 8 per floor, 4 sides
+    const windowMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+    const winW = width * 0.2;
+    const winH = floorHeight * 0.4;
+    const winGeo = new THREE.PlaneGeometry(winW, winH);
+
+    const yOffset = floorHeight * 0.5;
+    const zOffset = depth / 2 + 0.01;
+    const xOffset = width / 2 + 0.01;
+    const insetX = width * 0.2;
+    const insetZ = depth * 0.2;
+
+    for (let f = 0; f < stories; f++) {
+        const y = f * floorHeight + yOffset;
+
+        // Front (+Z)
+        const front1 = new THREE.Mesh(winGeo, windowMat);
+        front1.name = 'Window';
+        front1.position.set(-insetX, y, zOffset);
+        group.add(front1);
+        const front2 = front1.clone();
+        front2.position.x = insetX;
+        group.add(front2);
+
+        // Back (-Z)
+        const back1 = front1.clone();
+        back1.position.set(-insetX, y, -zOffset);
+        back1.rotateY(Math.PI);
+        group.add(back1);
+        const back2 = back1.clone();
+        back2.position.x = insetX;
+        group.add(back2);
+
+        // Right (+X)
+        const right1 = front1.clone();
+        right1.position.set(xOffset, y, insetZ);
+        right1.rotateY(-Math.PI / 2);
+        group.add(right1);
+        const right2 = right1.clone();
+        right2.position.z = -insetZ;
+        group.add(right2);
+
+        // Left (-X)
+        const left1 = front1.clone();
+        left1.position.set(-xOffset, y, insetZ);
+        left1.rotateY(Math.PI / 2);
+        group.add(left1);
+        const left2 = left1.clone();
+        left2.position.z = -insetZ;
+        group.add(left2);
+    }
+
+    group.traverse(child => child.updateMatrix());
+    group.updateMatrixWorld(true);
+    return group;
+}
+
 // Ensure assets dir exists
 const assetsDir = path.resolve('assets');
 if (!fs.existsSync(assetsDir)) {
@@ -241,3 +312,12 @@ const tree = createTree();
 const treeObj = exporter.parse(tree);
 fs.writeFileSync(path.join(assetsDir, 'tree.obj'), treeObj);
 console.log('Tree OBJ exported');
+
+// Export Buildings
+const b2 = createBuilding(2, 4, 12, 10);
+const b3 = createBuilding(3, 4, 12, 10);
+const b5 = createBuilding(5, 4, 14, 12);
+fs.writeFileSync(path.join(assetsDir, 'building_2.obj'), exporter.parse(b2));
+fs.writeFileSync(path.join(assetsDir, 'building_3.obj'), exporter.parse(b3));
+fs.writeFileSync(path.join(assetsDir, 'building_5.obj'), exporter.parse(b5));
+console.log('Buildings OBJ exported (2F, 3F, 5F)');

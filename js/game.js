@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { TerrainManager, getHeight } from './terrain.js?v=19';
-import { loadF16, loadTree, loadRoundTree, loadRunwayTexture } from './assets.js?v=7';
-import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=7';
+import { TerrainManager, getHeight } from './terrain.js?v=23';
+import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding } from './assets.js?v=9';
+import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 
 // Global variables
 let camera, scene, renderer;
@@ -23,8 +23,18 @@ let taxiTarget = null;
 let taxiFinalRotation = 0;
 let explosions = [];
 let bullets = [];
+let bombs = [];
+let lastBombTime = performance.now() - 3000;
 let laserEnergy = 100;
 let jetFlame = null;
+let points = 0;
+
+// HUD Overlays
+let reticleCanvas, reticleCtx;
+const RETICLE_FORWARD = 200; // distance ahead of plane
+const RETICLE_UP = 2;       // lowered by 5 units
+const POINTS_PER_TREE = 1;
+const POINTS_PER_BUILDING = 3;
 
 init();
 // Animation handled inside init via requestAnimationFrame on load
@@ -74,7 +84,12 @@ async function init() {
     // Load Round Tree Model for mixed forests
     const roundTreeModel = await loadRoundTree();
 
-    terrainManager = new TerrainManager(scene, treeModel, runwayTex, roundTreeModel);
+    // Load buildings
+    const building2 = await loadBuilding(2);
+    const building3 = await loadBuilding(3);
+    const building5 = await loadBuilding(5);
+
+    terrainManager = new TerrainManager(scene, treeModel, runwayTex, roundTreeModel, [building2, building3, building5]);
     terrainManager.update(new THREE.Vector3(0, 0, 0));
 
     // Find the start runway (closest to 0,0)
@@ -126,6 +141,7 @@ async function init() {
     window.addEventListener('resize', onWindowResize);
 
     setupMinimap();
+    setupReticle();
 
     // Start loop
     animate();
@@ -150,8 +166,8 @@ async function init() {
             camYaw += e.movementX * sensitivity;
             camPitch += e.movementY * sensitivity;
 
-            // Layout pitch limits? -PI/2 to PI/2
-            camPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camPitch));
+            // Allow full 360 look: clamp just shy of +/- PI to avoid gimbal issues
+            camPitch = Math.max(-Math.PI + 0.01, Math.min(Math.PI - 0.01, camPitch));
         }
     });
 }
@@ -160,6 +176,7 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    updateReticlePosition();
 }
 
 function animate() {
@@ -192,7 +209,7 @@ function animate() {
                 }
             }
 
-            updateControls(plane, delta, safeY, laserEnergy);
+            updateControls(plane, delta, safeY, laserEnergy, getBombChargePct(), updateHUD);
 
             // Camera follow logic
             const relativeCameraOffset = new THREE.Vector3(0, 5, 20);
@@ -333,7 +350,17 @@ function animate() {
                     }
                 }
 
-                // 3. Mountains - Use raycast for precise surface collision
+                // 3. Buildings - precise Box3
+                const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
+                for (const bld of buildings) {
+                    const box = new THREE.Box3().setFromObject(bld);
+                    if (box.containsPoint(plane.position)) {
+                        triggerCrash();
+                        break;
+                    }
+                }
+
+                // 4. Mountains - Use raycast for precise surface collision
                 const mountains = terrainManager.getMountains();
                 for (const mountain of mountains) {
                     // Quick distance check first (optimization)
@@ -368,6 +395,9 @@ function animate() {
     updateBullets(delta);
     updateExplosions(delta);
     updateJetFlame();
+    updateReticlePosition();
+    updateBombs(delta);
+    updateHUD(getBombChargePct());
 
     renderer.render(scene, camera);
     drawMinimap();
@@ -391,6 +421,83 @@ function setupMinimap() {
         document.body.appendChild(minimapCanvas); // Fallback
     }
     minimapCtx = minimapCanvas.getContext('2d');
+}
+
+function setupReticle() {
+    reticleCanvas = document.createElement('canvas');
+    reticleCanvas.width = 48;
+    reticleCanvas.height = 48;
+    reticleCanvas.id = 'reticle';
+    reticleCanvas.style.position = 'absolute';
+    reticleCanvas.style.top = '50%';
+    reticleCanvas.style.left = '50%';
+    reticleCanvas.style.transform = 'translate(-50%, -50%)';
+    reticleCanvas.style.pointerEvents = 'none';
+    reticleCanvas.style.zIndex = '5';
+
+    reticleCtx = reticleCanvas.getContext('2d');
+    reticleCtx.clearRect(0, 0, reticleCanvas.width, reticleCanvas.height);
+    reticleCtx.strokeStyle = 'rgba(0,0,0,0.9)';
+    reticleCtx.lineWidth = 2;
+
+    // Outer ring
+    reticleCtx.beginPath();
+    reticleCtx.arc(24, 24, 14, 0, Math.PI * 2);
+    reticleCtx.stroke();
+
+    // Cross lines
+    const c = 24;
+    const len = 16;
+    reticleCtx.beginPath();
+    reticleCtx.moveTo(c - len, c);
+    reticleCtx.lineTo(c - 4, c);
+    reticleCtx.moveTo(c + 4, c);
+    reticleCtx.lineTo(c + len, c);
+    reticleCtx.moveTo(c, c - len);
+    reticleCtx.lineTo(c, c - 4);
+    reticleCtx.moveTo(c, c + 4);
+    reticleCtx.lineTo(c, c + len);
+    reticleCtx.stroke();
+
+    document.body.appendChild(reticleCanvas);
+}
+
+function updateReticlePosition() {
+    if (!reticleCanvas || !camera || !plane) return;
+
+    // Point ahead of the plane (forward is -Z in local space)
+    const target = new THREE.Vector3(0, RETICLE_UP, -RETICLE_FORWARD);
+    plane.localToWorld(target);
+
+    const projected = target.clone().project(camera);
+    const x = (projected.x + 1) * 0.5 * window.innerWidth;
+    const y = (-projected.y + 1) * 0.5 * window.innerHeight;
+
+    reticleCanvas.style.left = `${x}px`;
+    reticleCanvas.style.top = `${y}px`;
+}
+
+function getBombChargePct() {
+    const now = performance.now();
+    const elapsed = now - lastBombTime;
+    return Math.max(0, Math.min(1, elapsed / BOMB_COOLDOWN_MS)) * 100;
+}
+
+function updateHUD(bombCharge = null) {
+    // Bomb charge (0-100) if provided
+    if (bombCharge !== null) {
+        const bombBar = document.getElementById('bomb-bar');
+        const bombVal = document.getElementById('bomb-val');
+        if (bombBar) bombBar.style.width = `${bombCharge}%`;
+        if (bombVal) bombVal.innerText = `${Math.round(bombCharge)}%`;
+    }
+
+    // Points slider (0-20)
+    const ptsBar = document.getElementById('points-bar');
+    const ptsVal = document.getElementById('points-val');
+    const clamped = Math.max(0, Math.min(20, points));
+    if (ptsBar) ptsBar.style.width = `${(clamped / 20) * 100}%`;
+    if (ptsVal) ptsVal.innerText = `${clamped} / 20`;
 }
 
 function drawMinimap() {
@@ -452,6 +559,16 @@ function drawMinimap() {
         minimapCtx.fill();
     }
 
+    // Draw Buildings (White squares)
+    const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
+    minimapCtx.fillStyle = '#FFFFFF';
+    for (const b of buildings) {
+        const bx = (b.position.x - px) * scale;
+        const bz = (b.position.z - pz) * scale;
+        const half = 3; // fixed small size on minimap
+        minimapCtx.fillRect(bx - half, bz - half, half * 2, half * 2);
+    }
+
     // Draw Plane (Red Triangle)
     minimapCtx.fillStyle = 'red';
     // Rotate context to match plane Heading
@@ -507,7 +624,7 @@ function updateTaxi(delta) {
         laserEnergy = 100;
 
         const instructions = document.getElementById('instructions');
-        if (instructions) instructions.innerHTML = "Pitch: W/S | Roll: A/D<br>Throttle: Up/Down Arrows | Rudder: Left/Right Arrows<br>R: Reset";
+        if (instructions) instructions.innerHTML = "Pitch: W/S | Roll: Q/E<br>Throttle: Up/Down Arrows | Rudder: A/D<br>R: Reset";
         console.log("Taxi complete. Ready.");
         return;
     }
@@ -647,7 +764,7 @@ function triggerCrash() {
 
         // Reset UI
         if (instructions) {
-            instructions.innerHTML = "Pitch: W/S | Roll: A/D<br>Throttle: Up/Down Arrows | Rudder: Left/Right Arrows<br>R: Reset";
+            instructions.innerHTML = "Pitch: W/S | Roll: Q/E<br>Throttle: Up/Down Arrows | Rudder: A/D<br>R: Reset";
         }
     }, 2000);
 }
@@ -832,9 +949,26 @@ function updateBullets(delta) {
                 // Remove Tree
                 scene.remove(tree);
                 trees.splice(j, 1);
+                points += POINTS_PER_TREE;
+                updateHUD();
 
                 hit = true;
                 break;
+            }
+        }
+
+        // Building collisions (precise Box3)
+        const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
+        for (let j = buildings.length - 1; j >= 0 && !hit; j--) {
+            const bld = buildings[j];
+            const box = new THREE.Box3().setFromObject(bld);
+            if (box.containsPoint(b.mesh.position)) {
+                createExplosion(box.getCenter(new THREE.Vector3()), 1.2);
+                scene.remove(bld);
+                if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
+                points += POINTS_PER_BUILDING;
+                updateHUD();
+                hit = true;
             }
         }
 
@@ -848,9 +982,172 @@ function updateBullets(delta) {
     }
 }
 
-// Fire Listener
+// Bombs
+const BOMB_GRAVITY = -30;
+const BOMB_DRAG = 0.005;
+const BOMB_COOLDOWN_MS = 3000;
+
+function dropBomb() {
+    if (!plane || isCrashed) return;
+    const now = performance.now();
+    if (now - lastBombTime < BOMB_COOLDOWN_MS) return;
+
+    // Spawn beneath the plane nose
+    const localOffset = new THREE.Vector3(0, -2, -2);
+    const worldPos = localOffset.clone();
+    plane.localToWorld(worldPos);
+
+    // Bomb shape: capsule body + tail fins, oriented along forward axis
+    const bombBodyGeo = new THREE.CapsuleGeometry(0.45, 1.6, 6, 8);
+    bombBodyGeo.rotateX(Math.PI / 2); // align length along local Z (forward)
+    const bombMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.2, roughness: 0.6 });
+    const bombBody = new THREE.Mesh(bombBodyGeo, bombMat);
+    bombBody.castShadow = true;
+    bombBody.receiveShadow = true;
+
+    // Tail fins (3)
+    const finGeo = new THREE.BoxGeometry(0.08, 0.6, 0.25);
+    const fins = [];
+    const finRadius = 0.5;
+    const finZ = 0.9; // rear position
+    for (let i = 0; i < 3; i++) {
+        const fin = new THREE.Mesh(finGeo, bombMat);
+        const angle = (i / 3) * Math.PI * 2;
+        fin.position.set(Math.cos(angle) * finRadius, Math.sin(angle) * finRadius, finZ);
+        fin.rotation.z = angle;
+        fin.castShadow = true;
+        fin.receiveShadow = true;
+        fins.push(fin);
+    }
+
+    // Group bomb parts so we can align to plane
+    const bomb = new THREE.Group();
+    bomb.add(bombBody);
+    fins.forEach(f => bomb.add(f));
+    bomb.castShadow = true;
+    bomb.receiveShadow = true;
+    bomb.position.copy(worldPos);
+    bomb.quaternion.copy(plane.quaternion); // align with plane body axis
+
+    // Initial velocity: inherit plane forward velocity plus ~20 km/h (1 unit/s)
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(plane.quaternion).normalize();
+    const forwardSpeed = planeSpeed * 40 + 1; // plane uses 40 units/s per speed; +1 ≈ +20 km/h
+    const velocity = forward.multiplyScalar(forwardSpeed);
+
+    bombs.push({ mesh: bomb, velocity, alive: true });
+    scene.add(bomb);
+    lastBombTime = now;
+    updateHUD(0);
+}
+
+function updateBombs(delta) {
+    for (let i = bombs.length - 1; i >= 0; i--) {
+        const b = bombs[i];
+        if (!b.alive) continue;
+
+        // Apply gravity
+        b.velocity.y += BOMB_GRAVITY * delta;
+
+        // Apply simple drag
+        b.velocity.multiplyScalar(1 - BOMB_DRAG);
+
+        const move = b.velocity.clone().multiplyScalar(delta);
+        b.mesh.position.add(move);
+
+        // Ground collision (terrain height)
+        const groundY = getHeight(b.mesh.position.x, b.mesh.position.z);
+        if (b.mesh.position.y <= groundY + 0.5) {
+            createExplosion(b.mesh.position.clone(), 1.2);
+            scene.remove(b.mesh);
+            b.mesh.traverse(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                    else obj.material.dispose();
+                }
+            });
+            bombs.splice(i, 1);
+            continue;
+        }
+
+        // Tree collisions (destructible) with 2x hitbox for bombs
+        const trees = terrainManager.getTrees();
+        for (let j = trees.length - 1; j >= 0; j--) {
+            const tree = trees[j];
+
+            const dx = b.mesh.position.x - tree.position.x;
+            const dz = b.mesh.position.z - tree.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+
+            let baseRadius = 10;
+            let baseHeight = 45;
+            let effectiveScale = tree.scale.x;
+            if (tree.userData && tree.userData.treeType === 'round') {
+                baseRadius = tree.userData.baseRadius || 3.5;
+                baseHeight = tree.userData.baseHeight || 8.5;
+            }
+
+            const hitRadius = baseRadius * effectiveScale * 2; // 100% larger for bombs
+            const hitHeight = baseHeight * effectiveScale * 2;
+
+            if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                createExplosion(tree.position.clone().setY(tree.position.y + 5), 1.5);
+                scene.remove(tree);
+                trees.splice(j, 1);
+                points += POINTS_PER_TREE;
+                updateHUD();
+
+                // Remove bomb
+                scene.remove(b.mesh);
+                b.mesh.traverse(obj => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                });
+                bombs.splice(i, 1);
+                break;
+            }
+        }
+
+        // Building collisions (bombs, exact box)
+        const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
+        for (let j = buildings.length - 1; j >= 0; j--) {
+            const bld = buildings[j];
+            const box = new THREE.Box3().setFromObject(bld);
+            if (box.containsPoint(b.mesh.position)) {
+                createExplosion(box.getCenter(new THREE.Vector3()), 1.5);
+                scene.remove(bld);
+                if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
+                points += POINTS_PER_BUILDING;
+                updateHUD();
+
+                scene.remove(b.mesh);
+                b.mesh.traverse(obj => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                });
+                bombs.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+// Fire Listeners
+window.addEventListener('mousedown', (e) => {
+    // Left click fires lasers
+    if (e.button === 0) {
+        fireLasers();
+    }
+});
+
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
-        fireLasers();
+        dropBomb();
     }
 });

@@ -7,6 +7,8 @@ let keys = {
     ArrowDown: false,
     ArrowLeft: false,
     ArrowRight: false,
+    q: false,
+    e: false,
     w: false,
     s: false,
     a: false,
@@ -28,7 +30,7 @@ export function getPlaneObject() {
 }
 
 
-export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 100) {
+export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 100, bombChargePct = null, onHUD = () => {}) {
     if (!plane) return;
 
     // Throttle
@@ -62,19 +64,19 @@ export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 1
         }
     }
 
-    // Roll (Ailerons) - A/D Only
-    if (keys.a) {
+    // Roll (Ailerons) - Q/E
+    if (keys.q) {
         plane.rotateZ(delta * rollSpeed); // Bank Left
     }
-    if (keys.d) {
+    if (keys.e) {
         plane.rotateZ(-delta * rollSpeed); // Bank Right
     }
 
-    // Yaw (Rudder) - Left/Right Arrows Only
-    if (keys.ArrowLeft) {
+    // Yaw (Rudder) - A/D
+    if (keys.a) {
         plane.rotateY(delta * yawSpeed); // Yaw Left
     }
-    if (keys.ArrowRight) {
+    if (keys.d) {
         plane.rotateY(-delta * yawSpeed); // Yaw Right
     }
 
@@ -101,4 +103,8 @@ export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 1
     const laserVal = document.getElementById('laser-val');
     if (laserBar) laserBar.style.width = `${laserEnergy}%`;
     if (laserVal) laserVal.innerText = `${Math.round(laserEnergy)}%`;
+
+    if (bombChargePct !== null) {
+        onHUD(bombChargePct);
+    }
 }

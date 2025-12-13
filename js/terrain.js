@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
+// Spacing constants to keep runways and mountains apart across chunks
+const RUNWAY_SAFE_RADIUS = 120; // runway footprint + buffer
+const MOUNTAIN_RADIUS_ESTIMATE = 150; // conservative base radius estimate pre-build
+const RUNWAY_MOUNTAIN_BUFFER = 80; // extra gap to avoid visual overlap
+
 export function getHeight(x, z) {
     // Bias height up so most is land (above -2).
     // Using simple noise: range approx -10 to +10.
@@ -9,15 +14,19 @@ export function getHeight(x, z) {
 }
 
 export class TerrainManager {
-    constructor(scene, treeModel, runwayTexture, roundTreeModel) {
+    constructor(scene, treeModel, runwayTexture, roundTreeModel, buildingModels = []) {
         this.scene = scene;
         this.treeModel = treeModel;
         this.runwayTexture = runwayTexture;
         this.roundTreeModel = roundTreeModel; // Store new model
+        this.buildingModels = buildingModels;
         this.chunks = {};
         this.chunkSize = 1000;
         this.currentChunk = { x: Infinity, z: Infinity };
         this.activeTrees = [];
+        this.activeBuildings = [];
+        this.globalRunways = [];
+        this.globalMountains = [];
     }
 
     update(pos) {
@@ -41,7 +50,17 @@ export class TerrainManager {
                 const key = `${x},${z}`;
                 keepKeys.add(key);
                 if (!this.chunks[key]) {
-                    this.chunks[key] = new Chunk(x, z, this.chunkSize, this.scene, this.treeModel, this.runwayTexture, this.roundTreeModel);
+                    this.chunks[key] = new Chunk(
+                        x,
+                        z,
+                        this.chunkSize,
+                        this.scene,
+                        this.treeModel,
+                        this.runwayTexture,
+                        this.roundTreeModel,
+                        this.buildingModels,
+                        this
+                    );
                 }
             }
         }
@@ -56,8 +75,10 @@ export class TerrainManager {
 
         // Rebuild active trees list for collision
         this.activeTrees = [];
+        this.activeBuildings = [];
         for (const key in this.chunks) {
             this.activeTrees.push(...this.chunks[key].trees);
+            if (this.chunks[key].buildings) this.activeBuildings.push(...this.chunks[key].buildings);
         }
     }
 
@@ -80,16 +101,52 @@ export class TerrainManager {
         }
         return mountains;
     }
+
+    getBuildings() {
+        return this.activeBuildings;
+    }
+
+    registerBuilding(building) {
+        this.activeBuildings.push(building);
+    }
+
+    unregisterBuilding(building) {
+        this.activeBuildings = this.activeBuildings.filter(b => b !== building);
+        if (building.userData && building.userData.chunk) {
+            const arr = building.userData.chunk.buildings;
+            const idx = arr.indexOf(building);
+            if (idx >= 0) arr.splice(idx, 1);
+        }
+    }
+
+    registerRunway(runway) {
+        this.globalRunways.push(runway);
+    }
+
+    unregisterRunway(runway) {
+        this.globalRunways = this.globalRunways.filter(r => r !== runway);
+    }
+
+    registerMountain(mountain) {
+        this.globalMountains.push(mountain);
+    }
+
+    unregisterMountain(mountain) {
+        this.globalMountains = this.globalMountains.filter(m => m !== mountain);
+    }
 }
 
 class Chunk {
-    constructor(cx, cz, size, scene, treeModel, runwayTexture, roundTreeModel) {
+    constructor(cx, cz, size, scene, treeModel, runwayTexture, roundTreeModel, buildingModels, manager) {
         this.scene = scene;
         this.treeModel = treeModel;
         this.runwayTexture = runwayTexture;
         this.roundTreeModel = roundTreeModel;
+        this.buildingModels = buildingModels;
+        this.manager = manager;
         this.trees = [];
         this.runways = [];
+        this.buildings = [];
         this.mesh = null;
 
         const startX = cx * size - size / 2;
@@ -210,88 +267,58 @@ class Chunk {
             }
         }
 
-        // 3. Runway (One per chunk)
-        if (runwayTexture) {
-            const rwGeo = new THREE.BoxGeometry(20, 30, 100);
+        // 4. Mountain Range (One per chunk with 3-5 peaks)
+        // Choose a position that is far from ALL runways (cross-chunk)
+        const runwaysForCheck = this.manager ? this.manager.globalRunways : [];
+        const maxMountainAttempts = 12;
+        const chunkCenterX = cx * size;
+        const chunkCenterZ = cz * size;
 
-            // Apply vertex flaring logic BEFORE rotation/translation
-            // Flare the bottom 100% more (2.5x width at base)
-            const pos = rwGeo.attributes.position;
-            for (let i = 0; i < pos.count; i++) {
-                const y = pos.getY(i);
-                if (y < 0) {
-                    pos.setX(i, pos.getX(i) * 2.5); // 100% more flare (was 1.5)
-                    pos.setZ(i, pos.getZ(i) * 1.2);
+        let mX = chunkCenterX;
+        let mZ = chunkCenterZ;
+        let placedMountain = false;
+
+        for (let attempt = 0; attempt < maxMountainAttempts; attempt++) {
+            const mOffsetAngle = Math.random() * Math.PI * 2;
+            const mOffsetDist = size * 0.3 + Math.random() * size * 0.15; // 30-45% from center
+            const candidateX = chunkCenterX + Math.cos(mOffsetAngle) * mOffsetDist;
+            const candidateZ = chunkCenterZ + Math.sin(mOffsetAngle) * mOffsetDist;
+
+            let tooCloseToRunway = false;
+            for (const r of runwaysForCheck) {
+                const runwayRadius = (r.userData && r.userData.safeRadius) || RUNWAY_SAFE_RADIUS;
+                const dist = Math.hypot(candidateX - r.position.x, candidateZ - r.position.z);
+                if (dist < (MOUNTAIN_RADIUS_ESTIMATE + runwayRadius + RUNWAY_MOUNTAIN_BUFFER)) {
+                    tooCloseToRunway = true;
+                    break;
                 }
             }
-            rwGeo.computeVertexNormals();
 
-            const topMat = new THREE.MeshLambertMaterial({ map: runwayTexture });
-            const sideMat = new THREE.MeshLambertMaterial({ color: 0x111111 }); // Black
-            const mats = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
-
-            const runway = new THREE.Mesh(rwGeo, mats);
-
-            // Calculate Random Position
-            // Center of chunk: cx * size, cz * size
-            // Offset: 10% to 30% of size (size = 1000 => 100 to 300)
-            const minOffset = size * 0.10;
-            const maxOffset = size * 0.30;
-            const offsetDist = minOffset + Math.random() * (maxOffset - minOffset);
-            const offsetAngle = Math.random() * Math.PI * 2;
-
-            const offsetX = Math.cos(offsetAngle) * offsetDist;
-            const offsetZ = Math.sin(offsetAngle) * offsetDist;
-
-            const rX = cx * size + offsetX;
-            const rZ = cz * size + offsetZ;
-
-            // Calculate Random Rotation
-            const rotY = Math.random() * Math.PI * 2;
-            runway.rotation.y = rotY;
-
-            // Height Calculation
-            let maxH = -Infinity;
-            // Scan area in LOCAL space to cover the rotated runway footprint
-            // Bounding radius is approx sqrt(10^2 + 50^2) ~= 51
-            // Let's scan a safe radius around rX, rZ
-            for (let dx = -60; dx <= 60; dx += 20) {
-                for (let dz = -60; dz <= 60; dz += 20) {
-                    const h = getHeight(rX + dx, rZ + dz);
-                    if (h > maxH) maxH = h;
-                }
-            }
-            const rY = maxH + 0.2;
-
-            runway.position.set(rX, rY - 15, rZ); // -15 because height is 30, center at 0
-            runway.receiveShadow = true;
-            runway.updateMatrixWorld(true); // Ensure world matrix is up to date
-
-            scene.add(runway);
-            this.runways.push(runway);
-
-            // Clear trees in runway area
-            // Use OBB (Oriented Bounding Box) logic or simple safe radius
-            // Safe radius: 60 units
-            for (let i = this.trees.length - 1; i >= 0; i--) {
-                const t = this.trees[i];
-                const dx = t.position.x - rX;
-                const dz = t.position.z - rZ;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-
-                if (dist < 80) { // slightly larger than safe scan to be sure
-                    scene.remove(t);
-                    this.trees.splice(i, 1);
-                }
+            if (!tooCloseToRunway) {
+                mX = candidateX;
+                mZ = candidateZ;
+                placedMountain = true;
+                break;
             }
         }
 
-        // 4. Mountain Range (One per chunk with 3-5 peaks)
-        // Random position within chunk (avoiding center where runway might be)
-        const mOffsetAngle = Math.random() * Math.PI * 2;
-        const mOffsetDist = size * 0.3 + Math.random() * size * 0.15; // 30-45% from center
-        const mX = cx * size + Math.cos(mOffsetAngle) * mOffsetDist;
-        const mZ = cz * size + Math.sin(mOffsetAngle) * mOffsetDist;
+        if (!placedMountain && runwaysForCheck.length > 0) {
+            // Fallback: place opposite the nearest runway
+            let nearestRunway = runwaysForCheck[0];
+            let nearestDist = Math.hypot(mX - nearestRunway.position.x, mZ - nearestRunway.position.z);
+            for (const r of runwaysForCheck) {
+                const d = Math.hypot(chunkCenterX - r.position.x, chunkCenterZ - r.position.z);
+                if (d < nearestDist) {
+                    nearestRunway = r;
+                    nearestDist = d;
+                }
+            }
+            const angleOppositeRunway = Math.atan2(nearestRunway.position.z - chunkCenterZ, nearestRunway.position.x - chunkCenterX) + Math.PI;
+            const fallbackDist = size * 0.45;
+            mX = chunkCenterX + Math.cos(angleOppositeRunway) * fallbackDist;
+            mZ = chunkCenterZ + Math.sin(angleOppositeRunway) * fallbackDist;
+        }
+
         const mBaseY = getHeight(mX, mZ);
 
         // Multi-Peak Mountain using merged geometries
@@ -391,6 +418,9 @@ class Chunk {
 
         scene.add(mountain);
         this.mountain = mountain;
+        if (this.manager) {
+            this.manager.registerMountain(mountain);
+        }
 
         // Clear trees near mountain
         for (let i = this.trees.length - 1; i >= 0; i--) {
@@ -404,7 +434,7 @@ class Chunk {
             }
         }
 
-        // 5. Add pine trees around mountain range (10-15 trees)
+        // 4. Add pine trees around mountain range (10-15 trees)
         // Place trees OUTSIDE the mountain base, on the surrounding ground
         if (this.treeModel) {
             const numTrees = 10 + Math.floor(Math.random() * 6); // 10-15
@@ -437,6 +467,216 @@ class Chunk {
                 this.trees.push(tree);
             }
         }
+
+        // 5. Runway (One per chunk) - placed after mountain to keep separation
+        if (runwayTexture) {
+            const rwGeo = new THREE.BoxGeometry(20, 30, 100);
+
+            // Apply vertex flaring logic BEFORE rotation/translation
+            const pos = rwGeo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                const y = pos.getY(i);
+                if (y < 0) {
+                    pos.setX(i, pos.getX(i) * 2.5);
+                    pos.setZ(i, pos.getZ(i) * 1.2);
+                }
+            }
+            rwGeo.computeVertexNormals();
+
+            const topMat = new THREE.MeshLambertMaterial({ map: runwayTexture });
+            const sideMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+            const mats = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+
+            const runway = new THREE.Mesh(rwGeo, mats);
+
+            // Separation logic from mountain
+            const minOffset = size * 0.10;
+            const maxOffset = size * 0.30;
+            const runwaySafeRadius = RUNWAY_SAFE_RADIUS; // covers 20x100 footprint with margin
+            const mountainsForCheck = this.manager ? this.manager.globalMountains : (this.mountain ? [this.mountain] : []);
+            const separationBuffer = RUNWAY_MOUNTAIN_BUFFER;
+
+            let rX = cx * size;
+            let rZ = cz * size;
+            let rotY = 0;
+            let placed = false;
+            const maxAttempts = 10;
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const offsetDist = minOffset + Math.random() * (maxOffset - minOffset);
+                const offsetAngle = Math.random() * Math.PI * 2;
+                const offsetX = Math.cos(offsetAngle) * offsetDist;
+                const offsetZ = Math.sin(offsetAngle) * offsetDist;
+
+                rX = cx * size + offsetX;
+                rZ = cz * size + offsetZ;
+
+                let tooCloseToMountain = false;
+                for (const m of mountainsForCheck) {
+                    const mRadius = (m.userData && m.userData.baseRadius) || MOUNTAIN_RADIUS_ESTIMATE;
+                    const distToMountain = Math.hypot(rX - m.position.x, rZ - m.position.z);
+                    if (distToMountain < runwaySafeRadius + mRadius + separationBuffer) {
+                        tooCloseToMountain = true;
+                        break;
+                    }
+                }
+                if (tooCloseToMountain) continue;
+
+                rotY = Math.random() * Math.PI * 2;
+                placed = true;
+                break;
+            }
+
+            if (!placed && mountainsForCheck.length > 0) {
+                let nearestMountain = mountainsForCheck[0];
+                let nearestDist = Math.hypot(rX - nearestMountain.position.x, rZ - nearestMountain.position.z);
+                for (const m of mountainsForCheck) {
+                    const d = Math.hypot(cx * size - m.position.x, cz * size - m.position.z);
+                    if (d < nearestDist) {
+                        nearestMountain = m;
+                        nearestDist = d;
+                    }
+                }
+                const angleOppositeMountain = Math.atan2(nearestMountain.position.z - cz * size, nearestMountain.position.x - cx * size) + Math.PI;
+                const fallbackDist = maxOffset;
+                rX = cx * size + Math.cos(angleOppositeMountain) * fallbackDist;
+                rZ = cz * size + Math.sin(angleOppositeMountain) * fallbackDist;
+                rotY = Math.random() * Math.PI * 2;
+            }
+
+            runway.rotation.y = rotY;
+
+            // Height Calculation
+            let maxH = -Infinity;
+            for (let dx = -60; dx <= 60; dx += 20) {
+                for (let dz = -60; dz <= 60; dz += 20) {
+                    const h = getHeight(rX + dx, rZ + dz);
+                    if (h > maxH) maxH = h;
+                }
+            }
+            const rY = maxH + 0.2;
+
+            runway.position.set(rX, rY - 15, rZ);
+            runway.receiveShadow = true;
+            runway.updateMatrixWorld(true);
+            runway.userData = runway.userData || {};
+            runway.userData.safeRadius = runwaySafeRadius;
+
+            scene.add(runway);
+            this.runways.push(runway);
+            if (this.manager) {
+                this.manager.registerRunway(runway);
+            }
+
+            // Clear trees in runway area
+            for (let i = this.trees.length - 1; i >= 0; i--) {
+                const t = this.trees[i];
+                const dx = t.position.x - rX;
+                const dz = t.position.z - rZ;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < 80) {
+                    scene.remove(t);
+                    this.trees.splice(i, 1);
+                }
+            }
+        }
+
+        // 6. Cities / Buildings (destructible) using prefab assets
+        const numCities = 2; // ensure multiple chances per chunk
+        const buildingsBefore = this.buildings.length;
+        const prefabCount = this.buildingModels ? this.buildingModels.length : 0;
+
+        const placeBuilding = (bx, bz, scale = 1) => {
+            if (!prefabCount) return;
+            const prefab = this.buildingModels[Math.floor(Math.random() * prefabCount)];
+            if (!prefab.userData || !prefab.userData.baseHalfExtents) {
+                const box = new THREE.Box3().setFromObject(prefab);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                prefab.userData = prefab.userData || {};
+                prefab.userData.baseHalfExtents = { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 };
+            }
+            const building = prefab.clone(true);
+            const s = scale * (0.9 + Math.random() * 0.2);
+            building.scale.setScalar(s);
+            const base = prefab.userData.baseHalfExtents;
+            const box = new THREE.Box3().setFromObject(building);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const halfExtents = { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 };
+            const groundY = getHeight(bx, bz);
+            // Align bottom of bounding box to ground
+            building.position.set(bx, groundY - box.min.y, bz);
+            // Refresh box after move for accuracy
+            const boxPlaced = new THREE.Box3().setFromObject(building);
+            const sizePlaced = new THREE.Vector3();
+            boxPlaced.getSize(sizePlaced);
+            const halfPlaced = { x: sizePlaced.x * 0.5, y: sizePlaced.y * 0.5, z: sizePlaced.z * 0.5 };
+
+            // Prevent overlap with already placed buildings (simple AABB check in XZ with small buffer)
+            const buffer = 2;
+            for (const existing of this.buildings) {
+                const he = existing.userData && existing.userData.halfExtents;
+                if (!he) continue;
+                const dx = Math.abs(bx - existing.position.x);
+                const dz = Math.abs(bz - existing.position.z);
+                if (dx < (halfPlaced.x + he.x + buffer) && dz < (halfPlaced.z + he.z + buffer)) {
+                    return; // skip placement
+                }
+            }
+
+            building.userData = {
+                ...prefab.userData,
+                halfExtents: halfPlaced,
+                chunk: this
+            };
+            building.castShadow = true;
+            building.receiveShadow = true;
+            this.scene.add(building);
+            this.buildings.push(building);
+            if (this.manager) this.manager.registerBuilding(building);
+        };
+
+        for (let c = 0; c < numCities; c++) {
+            const cityRadius = size * (0.15 + Math.random() * 0.15); // 15-30% of chunk
+            const cityAngle = Math.random() * Math.PI * 2;
+            const cityX = cx * size + Math.cos(cityAngle) * cityRadius;
+            const cityZ = cz * size + Math.sin(cityAngle) * cityRadius;
+
+            const buildingsInCity = 4 + Math.floor(Math.random() * 5); // 4-8 buildings
+            for (let b = 0; b < buildingsInCity; b++) {
+                const bx = cityX + (Math.random() - 0.5) * 80;
+                const bz = cityZ + (Math.random() - 0.5) * 80;
+
+                // Avoid placing too close to runway or mountain
+                let skip = false;
+                for (const r of this.runways) {
+                    const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
+                    if (dist < 100) { skip = true; break; }
+                }
+                if (!skip && this.mountain) {
+                    const distM = Math.hypot(bx - this.mountain.position.x, bz - this.mountain.position.z);
+                    if (distM < ((this.mountain.userData && this.mountain.userData.baseRadius) || 150) + 40) skip = true;
+                }
+                if (skip) continue;
+
+                const groundY = getHeight(bx, bz);
+                if (groundY < -2) continue; // avoid water
+
+                placeBuilding(bx, bz);
+            }
+        }
+
+        // Fallback: ensure at least one building per chunk
+        if (this.buildings.length === buildingsBefore) {
+            const bx = cx * size + (Math.random() - 0.5) * 200;
+            const bz = cz * size + (Math.random() - 0.5) * 200;
+            const groundY = getHeight(bx, bz);
+            if (groundY > -2) {
+                placeBuilding(bx, bz, 1);
+            }
+        }
     }
 
     dispose() {
@@ -451,6 +691,9 @@ class Chunk {
         this.trees = [];
 
         for (const r of this.runways) {
+            if (this.manager) {
+                this.manager.unregisterRunway(r);
+            }
             this.scene.remove(r);
             r.geometry.dispose();
             // Don't dispose material if shared? Actually recreated each time here.
@@ -461,10 +704,25 @@ class Chunk {
 
         // Dispose mountain
         if (this.mountain) {
+            if (this.manager) {
+                this.manager.unregisterMountain(this.mountain);
+            }
             this.scene.remove(this.mountain);
             this.mountain.geometry.dispose();
             this.mountain.material.dispose();
             this.mountain = null;
         }
+
+        // Dispose buildings
+        for (const b of this.buildings) {
+            if (this.manager) this.manager.unregisterBuilding(b);
+            this.scene.remove(b);
+            if (b.geometry) b.geometry.dispose();
+            if (b.material) {
+                if (Array.isArray(b.material)) b.material.forEach(m => m.dispose());
+                else b.material.dispose();
+            }
+        }
+        this.buildings = [];
     }
 }

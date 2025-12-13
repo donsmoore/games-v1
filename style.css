@@ -6,6 +6,24 @@ body {
     font-family: 'Courier New', Courier, monospace;
 }
 
+.hud-button {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    background: rgba(40, 40, 40, 0.85);
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.hud-button:hover {
+    background: rgba(60, 60, 60, 0.9);
+}
+
 canvas {
     display: block;
 }
