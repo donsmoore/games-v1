@@ -1,0 +1,35 @@
+# Material Library
+# Created by export_assets.js
+
+newmtl Fuselage
+Kd 0.333333 0.333333 0.333333
+Ka 0.100000 0.100000 0.100000
+Ks 0.5 0.5 0.5
+Ns 30
+d 1
+illum 2
+
+newmtl Cockpit
+Kd 0.533333 0.800000 1.000000
+Ka 0.160000 0.240000 0.300000
+Ks 0.5 0.5 0.5
+Ns 100
+d 0.7
+illum 2
+
+newmtl Wings
+Kd 0.266667 0.266667 0.266667
+Ka 0.080000 0.080000 0.080000
+Ks 0.5 0.5 0.5
+Ns 30
+d 1
+illum 2
+
+newmtl Gear
+Kd 0.200000 0.200000 0.200000
+Ka 0.060000 0.060000 0.060000
+Ks 0.5 0.5 0.5
+Ns 20
+d 1
+illum 2
+

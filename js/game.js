@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { TerrainManager, getHeight } from './terrain.js?v=23';
-import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding } from './assets.js?v=9';
+import { TerrainManager, getHeight } from './terrain.js?v=24';
+import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree } from './assets.js?v=12';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 
 // Global variables
@@ -81,15 +81,27 @@ async function init() {
     runwayTex.wrapS = THREE.RepeatWrapping;
     runwayTex.wrapT = THREE.RepeatWrapping;
 
-    // Load Round Tree Model for mixed forests
+    // Load all tree types for variety
     const roundTreeModel = await loadRoundTree();
+    const palmTreeModel = await loadPalmTree();
+    const mushroomTreeModel = await loadMushroomTree();
+    const baobabTreeModel = await loadBaobabTree();
 
     // Load buildings
     const building2 = await loadBuilding(2);
     const building3 = await loadBuilding(3);
     const building5 = await loadBuilding(5);
 
-    terrainManager = new TerrainManager(scene, treeModel, runwayTex, roundTreeModel, [building2, building3, building5]);
+    terrainManager = new TerrainManager(
+        scene, 
+        treeModel, 
+        runwayTex, 
+        roundTreeModel, 
+        [building2, building3, building5],
+        palmTreeModel,
+        mushroomTreeModel,
+        baobabTreeModel
+    );
     terrainManager.update(new THREE.Vector3(0, 0, 0));
 
     // Find the start runway (closest to 0,0)
@@ -324,8 +336,10 @@ function animate() {
                 }
 
                 // 2. Trees
-                const trees = terrainManager.getTrees();
-                for (const tree of trees) {
+                const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
+                
+                // Check regular trees
+                for (const tree of activeTrees) {
                     // Cylinder Collision Check
                     const dx = plane.position.x - tree.position.x;
                     const dz = plane.position.z - tree.position.z;
@@ -345,6 +359,28 @@ function animate() {
 
                     if (distXZ < hitRadius && plane.position.y < tree.position.y + hitHeight) {
                         console.log("Tree Hit!");
+                        triggerCrash();
+                        break;
+                    }
+                }
+                
+                // Check Baobab trees
+                for (const tree of activeBaobabTrees) {
+                    const dx = plane.position.x - tree.position.x;
+                    const dz = plane.position.z - tree.position.z;
+                    const distXZ = Math.sqrt(dx * dx + dz * dz);
+
+                    let baseRadius = 25;
+                    let baseHeight = 50;
+                    if (tree.userData) {
+                        baseRadius = tree.userData.baseRadius || baseRadius;
+                        baseHeight = tree.userData.baseHeight || baseHeight;
+                    }
+                    const hitRadius = baseRadius * tree.scale.x;
+                    const hitHeight = baseHeight * tree.scale.y;
+
+                    if (distXZ < hitRadius && plane.position.y < tree.position.y + hitHeight) {
+                        console.log("Baobab Tree Hit!");
                         triggerCrash();
                         break;
                     }
@@ -548,14 +584,25 @@ function drawMinimap() {
     }
 
     // Draw Trees (Green Dots)
-    const trees = terrainManager.getTrees();
+    const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
     minimapCtx.fillStyle = '#00FF00';
-    for (const t of trees) {
+    for (const t of activeTrees) {
         const tx = (t.position.x - px) * scale;
         const tz = (t.position.z - pz) * scale;
 
         minimapCtx.beginPath();
         minimapCtx.arc(tx, tz, 2, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+    
+    // Draw Baobab Trees (Orange Larger Dots)
+    minimapCtx.fillStyle = '#FF8800';
+    for (const t of activeBaobabTrees) {
+        const tx = (t.position.x - px) * scale;
+        const tz = (t.position.z - pz) * scale;
+
+        minimapCtx.beginPath();
+        minimapCtx.arc(tx, tz, 4, 0, Math.PI * 2);
         minimapCtx.fill();
     }
 
@@ -910,10 +957,10 @@ function updateBullets(delta) {
 
         let hit = false;
 
-        // Tree Collisions
-        const trees = terrainManager.getTrees();
-        for (let j = trees.length - 1; j >= 0; j--) {
-            const tree = trees[j];
+        // Regular Tree Collisions
+        const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
+        for (let j = activeTrees.length - 1; j >= 0; j--) {
+            const tree = activeTrees[j];
 
             // Check Hit (Cylinder collision)
             const dx = b.mesh.position.x - tree.position.x;
@@ -921,18 +968,13 @@ function updateBullets(delta) {
             const dist = Math.sqrt(dx * dx + dz * dz);
 
             // Use tree userData for accurate hitbox, or fallback to pine tree defaults
-            // Pine tree (OBJ): unscaled ~10 radius, ~45 height
-            // Round tree: unscaled ~3.5 radius, ~8.5 height (but has 10x base scale built in)
             let baseRadius = 10;
             let baseHeight = 45;
             let effectiveScale = tree.scale.x; // Random scale applied
 
-            if (tree.userData && tree.userData.treeType === 'round') {
-                // Round tree: geometry is small but has 10x base scale
-                // After multiplyScalar, scale is 5-10. Geometry radius is 3.5.
-                // Actual world radius = 3.5 * scale.x
-                baseRadius = tree.userData.baseRadius || 3.5;
-                baseHeight = tree.userData.baseHeight || 8.5;
+            if (tree.userData && tree.userData.baseRadius) {
+                baseRadius = tree.userData.baseRadius;
+                baseHeight = tree.userData.baseHeight;
             }
 
             const hitRadius = baseRadius * effectiveScale;
@@ -941,19 +983,71 @@ function updateBullets(delta) {
             if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
                 // Hit!
                 console.log("Laser hit tree!");
-                // Create explosion 5m above tree base for better visual
+                
                 const explosionPos = tree.position.clone();
                 explosionPos.y += 5;
                 createExplosion(explosionPos, 0.5); // Half size for trees
-
+                
                 // Remove Tree
                 scene.remove(tree);
-                trees.splice(j, 1);
+                terrainManager.unregisterTree(tree);
+                activeTrees.splice(j, 1);
                 points += POINTS_PER_TREE;
                 updateHUD();
 
                 hit = true;
                 break;
+            }
+        }
+        
+        // Baobab Tree Collisions (Boss Trees with HP)
+        if (!hit) {
+            for (let j = activeBaobabTrees.length - 1; j >= 0; j--) {
+                const tree = activeBaobabTrees[j];
+
+                const dx = b.mesh.position.x - tree.position.x;
+                const dz = b.mesh.position.z - tree.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                let baseRadius = 25;
+                let baseHeight = 50;
+                let effectiveScale = tree.scale.x;
+
+                if (tree.userData && tree.userData.baseRadius) {
+                    baseRadius = tree.userData.baseRadius;
+                    baseHeight = tree.userData.baseHeight;
+                }
+
+                const hitRadius = baseRadius * effectiveScale;
+                const hitHeight = baseHeight * effectiveScale;
+
+                if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                    console.log("Laser hit Baobab tree!");
+                    
+                    // Damage boss tree
+                    const destroyed = damageTree(tree, 1); // 1 HP damage per laser hit
+                    
+                    if (destroyed) {
+                        // Boss tree destroyed - BIG explosion!
+                        const explosionPos = tree.position.clone();
+                        explosionPos.y += baseHeight / 2; // Middle of tree
+                        createExplosion(explosionPos, 2.5); // 2.5x size explosion!
+                        
+                        // Remove tree
+                        scene.remove(tree);
+                        terrainManager.unregisterBaobabTree(tree);
+                        activeBaobabTrees.splice(j, 1);
+                        points += POINTS_PER_TREE * 10; // 10x points for boss tree!
+                        updateHUD();
+                    } else {
+                        // Still alive - small hit effect
+                        const explosionPos = b.mesh.position.clone();
+                        createExplosion(explosionPos, 0.3); // Small impact effect
+                    }
+
+                    hit = true;
+                    break;
+                }
             }
         }
 
@@ -963,7 +1057,7 @@ function updateBullets(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
-                createExplosion(box.getCenter(new THREE.Vector3()), 1.2);
+                createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
                 scene.remove(bld);
                 if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
                 points += POINTS_PER_BUILDING;
@@ -980,6 +1074,122 @@ function updateBullets(delta) {
             bullets.splice(i, 1);
         }
     }
+}
+
+// Health Bar System for Boss Trees
+function createHealthBar(tree) {
+    // Create canvas for health bar (50% larger)
+    const canvas = document.createElement('canvas');
+    canvas.width = 192; // 50% larger (was 128, now 192)
+    canvas.height = 24; // 50% larger (was 16, now 24)
+    const ctx = canvas.getContext('2d');
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    
+    // Create sprite material
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(15, 1.875, 1); // 50% larger scale (was 10, 1.25, now 15, 1.875)
+    
+    // Position above tree
+    const treeHeight = tree.userData.baseHeight || 70;
+    sprite.position.set(0, treeHeight + 5, 0); // 5 units above tree top
+    
+    // Add to tree
+    tree.add(sprite);
+    
+    // Store references
+    tree.userData.healthBarSprite = sprite;
+    tree.userData.healthBarCanvas = canvas;
+    tree.userData.healthBarContext = ctx;
+    
+    // Initially hide (only show when damaged)
+    sprite.visible = false;
+    
+    return sprite;
+}
+
+function updateHealthBar(tree) {
+    if (!tree.userData.healthBarContext) return;
+    
+    const ctx = tree.userData.healthBarContext;
+    const canvas = tree.userData.healthBarCanvas;
+    const sprite = tree.userData.healthBarSprite;
+    const maxHP = tree.userData.maxHP || 10;
+    const currentHP = tree.userData.currentHP || 10;
+    
+    // Show health bar only if damaged
+    if (currentHP < maxHP) {
+        sprite.visible = true;
+    } else {
+        sprite.visible = false;
+        return;
+    }
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Background (black with red tint)
+    ctx.fillStyle = '#220000';
+    ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
+    
+    // Health bar (green to yellow to red gradient based on HP)
+    const hpPercent = currentHP / maxHP;
+    let barColor;
+    if (hpPercent > 0.6) {
+        barColor = '#00ff00'; // Green
+    } else if (hpPercent > 0.3) {
+        barColor = '#ffff00'; // Yellow
+    } else {
+        barColor = '#ff0000'; // Red
+    }
+    
+    const barWidth = (canvas.width - 8) * hpPercent;
+    ctx.fillStyle = barColor;
+    ctx.fillRect(4, 4, barWidth, canvas.height - 8);
+    
+    // Border
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+    
+    // HP Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${currentHP}/${maxHP}`, canvas.width / 2, canvas.height / 2);
+    
+    // Update texture
+    sprite.material.map.needsUpdate = true;
+}
+
+function damageTree(tree, damage = 1) {
+    if (!tree.userData.isBossTree) return false; // Not a boss tree
+    
+    // Initialize HP if needed
+    if (tree.userData.currentHP === undefined) {
+        tree.userData.currentHP = tree.userData.maxHP || 10;
+    }
+    
+    // Create health bar if it doesn't exist
+    if (!tree.userData.healthBarSprite) {
+        createHealthBar(tree);
+    }
+    
+    // Apply damage
+    tree.userData.currentHP -= damage;
+    
+    // Update health bar
+    updateHealthBar(tree);
+    
+    // Check if destroyed
+    if (tree.userData.currentHP <= 0) {
+        return true; // Tree is destroyed
+    }
+    
+    return false; // Tree still alive
 }
 
 // Bombs
@@ -1071,9 +1281,12 @@ function updateBombs(delta) {
         }
 
         // Tree collisions (destructible) with 2x hitbox for bombs
-        const trees = terrainManager.getTrees();
-        for (let j = trees.length - 1; j >= 0; j--) {
-            const tree = trees[j];
+        const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
+        let treeHit = false;
+        
+        // Regular trees
+        for (let j = activeTrees.length - 1; j >= 0; j--) {
+            const tree = activeTrees[j];
 
             const dx = b.mesh.position.x - tree.position.x;
             const dz = b.mesh.position.z - tree.position.z;
@@ -1082,33 +1295,83 @@ function updateBombs(delta) {
             let baseRadius = 10;
             let baseHeight = 45;
             let effectiveScale = tree.scale.x;
-            if (tree.userData && tree.userData.treeType === 'round') {
-                baseRadius = tree.userData.baseRadius || 3.5;
-                baseHeight = tree.userData.baseHeight || 8.5;
+            if (tree.userData && tree.userData.baseRadius) {
+                baseRadius = tree.userData.baseRadius;
+                baseHeight = tree.userData.baseHeight;
             }
 
             const hitRadius = baseRadius * effectiveScale * 2; // 100% larger for bombs
             const hitHeight = baseHeight * effectiveScale * 2;
 
             if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                // Regular tree - instant destroy
                 createExplosion(tree.position.clone().setY(tree.position.y + 5), 1.5);
                 scene.remove(tree);
-                trees.splice(j, 1);
+                terrainManager.unregisterTree(tree);
+                activeTrees.splice(j, 1);
                 points += POINTS_PER_TREE;
                 updateHUD();
-
-                // Remove bomb
-                scene.remove(b.mesh);
-                b.mesh.traverse(obj => {
-                    if (obj.geometry) obj.geometry.dispose();
-                    if (obj.material) {
-                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                        else obj.material.dispose();
-                    }
-                });
-                bombs.splice(i, 1);
+                
+                treeHit = true;
                 break;
             }
+        }
+        
+        // Baobab trees (Boss Trees)
+        if (!treeHit) {
+            for (let j = activeBaobabTrees.length - 1; j >= 0; j--) {
+                const tree = activeBaobabTrees[j];
+
+                const dx = b.mesh.position.x - tree.position.x;
+                const dz = b.mesh.position.z - tree.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                let baseRadius = 25;
+                let baseHeight = 50;
+                let effectiveScale = tree.scale.x;
+                if (tree.userData && tree.userData.baseRadius) {
+                    baseRadius = tree.userData.baseRadius;
+                    baseHeight = tree.userData.baseHeight;
+                }
+
+                const hitRadius = baseRadius * effectiveScale * 2; // 100% larger for bombs
+                const hitHeight = baseHeight * effectiveScale * 2;
+
+                if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                    // Damage boss tree (bombs do 3 HP damage)
+                    const destroyed = damageTree(tree, 3);
+                    
+                    if (destroyed) {
+                        // Boss tree destroyed - HUGE explosion!
+                        createExplosion(tree.position.clone().setY(tree.position.y + baseHeight / 2), 2.5);
+                        scene.remove(tree);
+                        terrainManager.unregisterBaobabTree(tree);
+                        activeBaobabTrees.splice(j, 1);
+                        points += POINTS_PER_TREE * 10; // 10x points for boss tree!
+                        updateHUD();
+                    } else {
+                        // Still alive - medium hit effect
+                        createExplosion(tree.position.clone().setY(tree.position.y + 5), 0.8);
+                    }
+                    
+                    treeHit = true;
+                    break;
+                }
+            }
+        }
+
+        if (treeHit) {
+            // Remove bomb
+            scene.remove(b.mesh);
+            b.mesh.traverse(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                    else obj.material.dispose();
+                }
+            });
+            bombs.splice(i, 1);
+            continue;
         }
 
         // Building collisions (bombs, exact box)
@@ -1117,7 +1380,7 @@ function updateBombs(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
-                createExplosion(box.getCenter(new THREE.Vector3()), 1.5);
+                createExplosion(box.getCenter(new THREE.Vector3()), 0.75); // 50% smaller (was 1.5)
                 scene.remove(bld);
                 if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
                 points += POINTS_PER_BUILDING;

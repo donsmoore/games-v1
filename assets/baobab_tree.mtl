@@ -1,0 +1,27 @@
+# Material Library
+# Created by export_assets.js
+
+newmtl Trunk
+Kd 0.545098 0.450980 0.333333
+Ka 0.163529 0.135294 0.100000
+Ks 0.5 0.5 0.5
+Ns 10
+d 1
+illum 1
+
+newmtl Branches
+Kd 0.396078 0.262745 0.129412
+Ka 0.118824 0.078824 0.038824
+Ks 0.5 0.5 0.5
+Ns 8
+d 1
+illum 1
+
+newmtl Leaves
+Kd 0.133333 0.545098 0.133333
+Ka 0.040000 0.163529 0.040000
+Ks 0.5 0.5 0.5
+Ns 5
+d 1
+illum 1
+

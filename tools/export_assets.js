@@ -7,6 +7,70 @@ import path from 'path';
 if (!global.window) global.window = {};
 if (!global.document) global.document = {};
 
+/**
+ * Convert hex color to RGB 0-1 range (sRGB color space for MTL)
+ * MTL files expect sRGB values, not linear
+ */
+function hexToRGB(hex) {
+    const r = ((hex >> 16) & 0xFF) / 255;
+    const g = ((hex >> 8) & 0xFF) / 255;
+    const b = (hex & 0xFF) / 255;
+    return { r, g, b };
+}
+
+/**
+ * Create MTL (Material Library) file content
+ * @param {Array} materials - Array of {name, color, properties}
+ * @returns {string} MTL file content
+ */
+function createMTL(materials) {
+    let mtl = '# Material Library\n';
+    mtl += '# Created by export_assets.js\n\n';
+    
+    for (const mat of materials) {
+        mtl += `newmtl ${mat.name}\n`;
+        
+        // Diffuse color (Kd)
+        if (mat.color !== undefined) {
+            const color = hexToRGB(mat.color);
+            mtl += `Kd ${color.r.toFixed(6)} ${color.g.toFixed(6)} ${color.b.toFixed(6)}\n`;
+        }
+        
+        // Ambient color (Ka) - usually 30% of diffuse
+        if (mat.color !== undefined) {
+            const color = hexToRGB(mat.color);
+            mtl += `Ka ${(color.r * 0.3).toFixed(6)} ${(color.g * 0.3).toFixed(6)} ${(color.b * 0.3).toFixed(6)}\n`;
+        }
+        
+        // Specular color (Ks)
+        if (mat.specular !== undefined) {
+            const spec = hexToRGB(mat.specular);
+            mtl += `Ks ${spec.r.toFixed(6)} ${spec.g.toFixed(6)} ${spec.b.toFixed(6)}\n`;
+        } else {
+            mtl += `Ks 0.5 0.5 0.5\n`; // Default specular
+        }
+        
+        // Specular exponent (Ns) - shininess
+        mtl += `Ns ${mat.shininess || 30}\n`;
+        
+        // Transparency (d) - 1.0 = opaque, 0.0 = transparent
+        mtl += `d ${mat.opacity !== undefined ? mat.opacity : 1.0}\n`;
+        
+        // Illumination model (illum)
+        // 2 = highlight on (Phong), 1 = no specular (Lambert)
+        mtl += `illum ${mat.illum || 2}\n`;
+        
+        // Texture map (if provided)
+        if (mat.map) {
+            mtl += `map_Kd ${mat.map}\n`;
+        }
+        
+        mtl += '\n';
+    }
+    
+    return mtl;
+}
+
 function createF16() {
     const group = new THREE.Group();
     group.name = "F16";
@@ -15,6 +79,7 @@ function createF16() {
     const fuselageGeo = new THREE.CylinderGeometry(0.5, 0.5, 4, 16);
     fuselageGeo.rotateX(Math.PI / 2); // Rotate to lie on Z axis
     const fuselageMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+    fuselageMat.name = 'Fuselage'; // Name for MTL reference
     const fuselage = new THREE.Mesh(fuselageGeo, fuselageMat);
     fuselage.name = "Fuselage";
     group.add(fuselage);
@@ -54,6 +119,7 @@ function createF16() {
     wingGeo.rotateX(-Math.PI / 2);
 
     const wingMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+    wingMat.name = 'Wings';
     const rightWing = new THREE.Mesh(wingGeo, wingMat);
     rightWing.name = "Wings_Right";
     rightWing.position.z = 0;
@@ -134,6 +200,7 @@ function createF16() {
 
     // Landing Gear
     const gearMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+    gearMat.name = 'Gear'; // Material name for MTL reference
     const wheelGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
     wheelGeo.rotateZ(Math.PI / 2); // Wheel rolls along Z
     // Shorten Strut: 1.0 -> 0.5
@@ -194,26 +261,220 @@ function createTree() {
     const group = new THREE.Group();
     group.name = "Tree";
 
-    // Trunk
-    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8);
+    // Trunk - 10x larger geometry (no transform needed)
+    const trunkGeo = new THREE.CylinderGeometry(2.0, 3.0, 15.0, 8); // Was 0.2, 0.3, 1.5
     const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    trunkMat.name = 'Trunk'; // Material name for MTL reference
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.name = "Trunk";
-    trunk.position.y = 0.75;
+    trunk.position.y = 7.5; // Was 0.75
     group.add(trunk);
 
-    // Leaves (Cone)
-    const leavesGeo = new THREE.ConeGeometry(1.2, 3, 8);
+    // Leaves (Cone) - 10x larger geometry
+    const leavesGeo = new THREE.ConeGeometry(12.0, 30.0, 8); // Was 1.2, 3
     const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+    leavesMat.name = 'Leaves'; // Material name for MTL reference
     const leaves = new THREE.Mesh(leavesGeo, leavesMat);
     leaves.name = "Leaves";
-    leaves.position.y = 2.5;
+    leaves.position.y = 25.0; // Was 2.5
     group.add(leaves);
 
-    // Scale Up 10x
-    group.scale.set(10, 10, 10);
+    // No scaling needed - geometry is already correct size
 
     // Update Matrices
+    group.traverse(child => {
+        child.updateMatrix();
+    });
+    group.updateMatrixWorld(true);
+
+    return group;
+}
+
+function createRoundTree() {
+    const group = new THREE.Group();
+    group.name = "RoundTree";
+
+    // Trunk (Cylinder) - 5x larger geometry (no transform needed)
+    const trunkGeo = new THREE.CylinderGeometry(2.5, 4.0, 15.0, 8); // Was 0.5, 0.8, 3
+    trunkGeo.translate(0, 7.5, 0); // Base at 0 (was 1.5)
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    trunkMat.name = 'Trunk'; // Material name for MTL reference
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.name = "Trunk";
+    group.add(trunk);
+
+    // Leaves (Sphere) - 5x larger geometry
+    const leavesGeo = new THREE.SphereGeometry(17.5, 8, 8); // Was 3.5
+    leavesGeo.translate(0, 25.0, 0); // On top of trunk (was 5)
+    const leavesMat = new THREE.MeshLambertMaterial({ color: 0x2E8B57 }); // SeaGreen
+    leavesMat.name = 'Leaves'; // Material name for MTL reference
+    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+    leaves.name = "Leaves";
+    group.add(leaves);
+
+    // No scaling needed - geometry is already correct size
+
+    // Update Matrices
+    group.traverse(child => {
+        child.updateMatrix();
+    });
+    group.updateMatrixWorld(true);
+
+    return group;
+}
+
+function createPalmTree() {
+    const group = new THREE.Group();
+    group.name = "PalmTree";
+
+    // Trunk - Tall, slightly curved cylinder (10x scale baked in)
+    const trunkGeo = new THREE.CylinderGeometry(2.0, 3.0, 30.0, 8); // Tall trunk
+    trunkGeo.translate(0, 15.0, 0); // Base at 0
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 }); // Lighter brown
+    trunkMat.name = 'Trunk';
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.name = "Trunk";
+    group.add(trunk);
+
+    // Palm Leaves - 6 flat planes arranged in star pattern
+    const leafGeo = new THREE.PlaneGeometry(20.0, 8.0); // Long flat leaf
+    const leafMat = new THREE.MeshLambertMaterial({ 
+        color: 0x228B22,
+        side: THREE.DoubleSide 
+    });
+    leafMat.name = 'Leaves';
+
+    for (let i = 0; i < 6; i++) {
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        leaf.name = "Leaves";
+        
+        const angle = (i / 6) * Math.PI * 2;
+        leaf.position.set(0, 30.0, 0); // Top of trunk
+        leaf.rotation.y = angle;
+        leaf.rotation.x = -Math.PI / 6; // Droop down slightly
+        
+        group.add(leaf);
+    }
+
+    group.traverse(child => {
+        child.updateMatrix();
+    });
+    group.updateMatrixWorld(true);
+
+    return group;
+}
+
+function createMushroomTree() {
+    const group = new THREE.Group();
+    group.name = "MushroomTree";
+
+    // Stalk/Trunk - Short thick cylinder (5x scale baked in)
+    const stalkGeo = new THREE.CylinderGeometry(3.0, 3.5, 10.0, 8);
+    stalkGeo.translate(0, 5.0, 0); // Base at 0
+    const stalkMat = new THREE.MeshLambertMaterial({ color: 0xF5DEB3 }); // Wheat/tan color
+    stalkMat.name = 'Stalk';
+    const stalk = new THREE.Mesh(stalkGeo, stalkMat);
+    stalk.name = "Stalk";
+    group.add(stalk);
+
+    // Mushroom Cap - Flattened sphere/hemisphere
+    const capGeo = new THREE.SphereGeometry(15.0, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    capGeo.scale(1, 0.5, 1); // Flatten it
+    capGeo.translate(0, 10.0, 0); // On top of stalk
+    const capMat = new THREE.MeshLambertMaterial({ color: 0xFF6347 }); // Tomato red
+    capMat.name = 'Cap';
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.name = "Cap";
+    group.add(cap);
+
+    // Spots on cap (optional white spots)
+    const spotGeo = new THREE.SphereGeometry(2.0, 6, 6);
+    const spotMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF }); // White
+    spotMat.name = 'Spots';
+
+    // Add 3-5 random spots
+    for (let i = 0; i < 4; i++) {
+        const spot = new THREE.Mesh(spotGeo, spotMat);
+        spot.name = "Spots";
+        
+        const angle = (i / 4) * Math.PI * 2 + Math.random() * 0.5;
+        const radius = 8 + Math.random() * 4;
+        spot.position.set(
+            Math.cos(angle) * radius,
+            10.5 + Math.random() * 2,
+            Math.sin(angle) * radius
+        );
+        
+        group.add(spot);
+    }
+
+    group.traverse(child => {
+        child.updateMatrix();
+    });
+    group.updateMatrixWorld(true);
+
+    return group;
+}
+
+function createBaobabTree() {
+    const group = new THREE.Group();
+    group.name = "BaobabTree";
+
+    // Trunk - Very thick, tapered cylinder (5x larger than normal trees, so 50x base)
+    // Wider in middle (bottle-shaped)
+    const trunkBottomGeo = new THREE.CylinderGeometry(15.0, 20.0, 40.0, 8);
+    trunkBottomGeo.translate(0, 20.0, 0);
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 }); // Light brown
+    trunkMat.name = 'Trunk';
+    const trunkBottom = new THREE.Mesh(trunkBottomGeo, trunkMat);
+    trunkBottom.name = "Trunk";
+    group.add(trunkBottom);
+
+    // Top of trunk - slightly narrower
+    const trunkTopGeo = new THREE.CylinderGeometry(12.0, 15.0, 20.0, 8);
+    trunkTopGeo.translate(0, 50.0, 0);
+    const trunkTop = new THREE.Mesh(trunkTopGeo, trunkMat);
+    trunkTop.name = "Trunk";
+    group.add(trunkTop);
+
+    // Small branches at top - 4-6 thin cylinders
+    const branchMat = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Dark brown
+    branchMat.name = 'Branches';
+    
+    for (let i = 0; i < 5; i++) {
+        const branchGeo = new THREE.CylinderGeometry(1.5, 2.0, 15.0, 6);
+        const branch = new THREE.Mesh(branchGeo, branchMat);
+        branch.name = "Branches";
+        
+        const angle = (i / 5) * Math.PI * 2;
+        const branchX = Math.cos(angle) * 8;
+        const branchZ = Math.sin(angle) * 8;
+        
+        branch.position.set(branchX, 60.0 + Math.random() * 5, branchZ);
+        branch.rotation.z = (Math.random() - 0.5) * 0.5; // Slight angle
+        branch.rotation.x = (Math.random() - 0.5) * 0.5;
+        
+        group.add(branch);
+    }
+
+    // Small leaves/foliage clusters at branch ends
+    const leafMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+    leafMat.name = 'Leaves';
+    
+    for (let i = 0; i < 5; i++) {
+        const leafGeo = new THREE.SphereGeometry(6.0, 6, 6); // 50% larger (was 4.0, now 6.0)
+        const leaves = new THREE.Mesh(leafGeo, leafMat);
+        leaves.name = "Leaves";
+        
+        const angle = (i / 5) * Math.PI * 2;
+        const leafX = Math.cos(angle) * 10; // Closer to branches (was 15, now 10)
+        const leafZ = Math.sin(angle) * 10; // Closer to branches (was 15, now 10)
+        
+        leaves.position.set(leafX, 65.0 + Math.random() * 3, leafZ); // Lower Y (was 68.0, now 65.0)
+        
+        group.add(leaves);
+    }
+
     group.traverse(child => {
         child.updateMatrix();
     });
@@ -231,6 +492,7 @@ function createBuilding(stories = 2, floorHeight = 4, width = 12, depth = 10) {
     // Body
     const bodyGeo = new THREE.BoxGeometry(width, height, depth);
     const bodyMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+    bodyMat.name = 'BuildingBody'; // Material name for MTL reference
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = 'BuildingBody';
     body.position.y = height / 2;
@@ -238,6 +500,7 @@ function createBuilding(stories = 2, floorHeight = 4, width = 12, depth = 10) {
 
     // Windows: 2 per side per floor -> 8 per floor, 4 sides
     const windowMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+    windowMat.name = 'Window'; // Material name for MTL reference
     const winW = width * 0.2;
     const winH = floorHeight * 0.4;
     const winGeo = new THREE.PlaneGeometry(winW, winH);
@@ -301,23 +564,108 @@ if (!fs.existsSync(assetsDir)) {
 
 const exporter = new OBJExporter();
 
-// Export F16
+// Export F16 with MTL
 const f16 = createF16();
 const f16Obj = exporter.parse(f16);
-fs.writeFileSync(path.join(assetsDir, 'f16.obj'), f16Obj);
-console.log('F16 OBJ exported');
+const f16ObjWithMTL = `mtllib f16.mtl\n${f16Obj}`;
+fs.writeFileSync(path.join(assetsDir, 'f16.obj'), f16ObjWithMTL);
 
-// Export Tree
+const f16Materials = [
+    { name: 'Fuselage', color: 0x555555, shininess: 30 },
+    { name: 'Cockpit', color: 0x88CCFF, shininess: 100, opacity: 0.7 },
+    { name: 'Wings', color: 0x444444, shininess: 30 },
+    { name: 'Gear', color: 0x333333, shininess: 20 }
+];
+fs.writeFileSync(path.join(assetsDir, 'f16.mtl'), createMTL(f16Materials));
+console.log('✓ F16 OBJ + MTL exported');
+
+// Export Pine Tree with MTL
 const tree = createTree();
 const treeObj = exporter.parse(tree);
-fs.writeFileSync(path.join(assetsDir, 'tree.obj'), treeObj);
-console.log('Tree OBJ exported');
+const treeObjWithMTL = `mtllib pine_tree.mtl\n${treeObj}`;
+fs.writeFileSync(path.join(assetsDir, 'pine_tree.obj'), treeObjWithMTL);
 
-// Export Buildings
+const treeMaterials = [
+    { name: 'Trunk', color: 0x8B4513, shininess: 10, illum: 1 },
+    { name: 'Leaves', color: 0x228B22, shininess: 5, illum: 1 }
+];
+fs.writeFileSync(path.join(assetsDir, 'pine_tree.mtl'), createMTL(treeMaterials));
+console.log('✓ Pine Tree OBJ + MTL exported');
+
+// Export Round Tree with MTL
+const roundTree = createRoundTree();
+const roundTreeObj = exporter.parse(roundTree);
+const roundTreeObjWithMTL = `mtllib round_tree.mtl\n${roundTreeObj}`;
+fs.writeFileSync(path.join(assetsDir, 'round_tree.obj'), roundTreeObjWithMTL);
+
+const roundTreeMaterials = [
+    { name: 'Trunk', color: 0x8B4513, shininess: 10, illum: 1 },
+    { name: 'Leaves', color: 0x2E8B57, shininess: 5, illum: 1 }
+];
+fs.writeFileSync(path.join(assetsDir, 'round_tree.mtl'), createMTL(roundTreeMaterials));
+console.log('✓ Round Tree OBJ + MTL exported');
+
+// Export Palm Tree with MTL
+const palmTree = createPalmTree();
+const palmTreeObj = exporter.parse(palmTree);
+const palmTreeObjWithMTL = `mtllib palm_tree.mtl\n${palmTreeObj}`;
+fs.writeFileSync(path.join(assetsDir, 'palm_tree.obj'), palmTreeObjWithMTL);
+
+const palmTreeMaterials = [
+    { name: 'Trunk', color: 0x8B7355, shininess: 10, illum: 1 },
+    { name: 'Leaves', color: 0x228B22, shininess: 5, illum: 1 }
+];
+fs.writeFileSync(path.join(assetsDir, 'palm_tree.mtl'), createMTL(palmTreeMaterials));
+console.log('✓ Palm Tree OBJ + MTL exported');
+
+// Export Mushroom Tree with MTL
+const mushroomTree = createMushroomTree();
+const mushroomTreeObj = exporter.parse(mushroomTree);
+const mushroomTreeObjWithMTL = `mtllib mushroom_tree.mtl\n${mushroomTreeObj}`;
+fs.writeFileSync(path.join(assetsDir, 'mushroom_tree.obj'), mushroomTreeObjWithMTL);
+
+const mushroomTreeMaterials = [
+    { name: 'Stalk', color: 0xF5DEB3, shininess: 10, illum: 1 },
+    { name: 'Cap', color: 0xFF6347, shininess: 15, illum: 1 },
+    { name: 'Spots', color: 0xFFFFFF, shininess: 20, illum: 1 }
+];
+fs.writeFileSync(path.join(assetsDir, 'mushroom_tree.mtl'), createMTL(mushroomTreeMaterials));
+console.log('✓ Mushroom Tree OBJ + MTL exported');
+
+// Export Baobab Tree with MTL
+const baobabTree = createBaobabTree();
+const baobabTreeObj = exporter.parse(baobabTree);
+const baobabTreeObjWithMTL = `mtllib baobab_tree.mtl\n${baobabTreeObj}`;
+fs.writeFileSync(path.join(assetsDir, 'baobab_tree.obj'), baobabTreeObjWithMTL);
+
+const baobabTreeMaterials = [
+    { name: 'Trunk', color: 0x8B7355, shininess: 10, illum: 1 },
+    { name: 'Branches', color: 0x654321, shininess: 8, illum: 1 },
+    { name: 'Leaves', color: 0x228B22, shininess: 5, illum: 1 }
+];
+fs.writeFileSync(path.join(assetsDir, 'baobab_tree.mtl'), createMTL(baobabTreeMaterials));
+console.log('✓ Baobab Tree OBJ + MTL exported');
+
+// Export Buildings with MTL
 const b2 = createBuilding(2, 4, 12, 10);
 const b3 = createBuilding(3, 4, 12, 10);
 const b5 = createBuilding(5, 4, 14, 12);
-fs.writeFileSync(path.join(assetsDir, 'building_2.obj'), exporter.parse(b2));
-fs.writeFileSync(path.join(assetsDir, 'building_3.obj'), exporter.parse(b3));
-fs.writeFileSync(path.join(assetsDir, 'building_5.obj'), exporter.parse(b5));
-console.log('Buildings OBJ exported (2F, 3F, 5F)');
+
+const buildingMaterials = [
+    { name: 'BuildingBody', color: 0xffffff, shininess: 20 },
+    { name: 'Window', color: 0x000000, shininess: 50 }
+];
+
+const b2Obj = `mtllib building_2.mtl\n${exporter.parse(b2)}`;
+fs.writeFileSync(path.join(assetsDir, 'building_2.obj'), b2Obj);
+fs.writeFileSync(path.join(assetsDir, 'building_2.mtl'), createMTL(buildingMaterials));
+
+const b3Obj = `mtllib building_3.mtl\n${exporter.parse(b3)}`;
+fs.writeFileSync(path.join(assetsDir, 'building_3.obj'), b3Obj);
+fs.writeFileSync(path.join(assetsDir, 'building_3.mtl'), createMTL(buildingMaterials));
+
+const b5Obj = `mtllib building_5.mtl\n${exporter.parse(b5)}`;
+fs.writeFileSync(path.join(assetsDir, 'building_5.obj'), b5Obj);
+fs.writeFileSync(path.join(assetsDir, 'building_5.mtl'), createMTL(buildingMaterials));
+
+console.log('✓ Buildings OBJ + MTL exported (2F, 3F, 5F)');

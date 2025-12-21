@@ -1,0 +1,19 @@
+# Material Library
+# Created by export_assets.js
+
+newmtl BuildingBody
+Kd 1.000000 1.000000 1.000000
+Ka 0.300000 0.300000 0.300000
+Ks 0.5 0.5 0.5
+Ns 20
+d 1
+illum 2
+
+newmtl Window
+Kd 0.000000 0.000000 0.000000
+Ka 0.000000 0.000000 0.000000
+Ks 0.5 0.5 0.5
+Ns 50
+d 1
+illum 2
+

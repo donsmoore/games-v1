@@ -14,16 +14,20 @@ export function getHeight(x, z) {
 }
 
 export class TerrainManager {
-    constructor(scene, treeModel, runwayTexture, roundTreeModel, buildingModels = []) {
+    constructor(scene, treeModel, runwayTexture, roundTreeModel, buildingModels = [], palmTreeModel = null, mushroomTreeModel = null, baobabTreeModel = null) {
         this.scene = scene;
         this.treeModel = treeModel;
         this.runwayTexture = runwayTexture;
-        this.roundTreeModel = roundTreeModel; // Store new model
+        this.roundTreeModel = roundTreeModel;
+        this.palmTreeModel = palmTreeModel;
+        this.mushroomTreeModel = mushroomTreeModel;
+        this.baobabTreeModel = baobabTreeModel;
         this.buildingModels = buildingModels;
         this.chunks = {};
         this.chunkSize = 1000;
         this.currentChunk = { x: Infinity, z: Infinity };
         this.activeTrees = [];
+        this.activeBaobabTrees = [];
         this.activeBuildings = [];
         this.globalRunways = [];
         this.globalMountains = [];
@@ -59,7 +63,10 @@ export class TerrainManager {
                         this.runwayTexture,
                         this.roundTreeModel,
                         this.buildingModels,
-                        this
+                        this,
+                        this.palmTreeModel,
+                        this.mushroomTreeModel,
+                        this.baobabTreeModel
                     );
                 }
             }
@@ -75,15 +82,17 @@ export class TerrainManager {
 
         // Rebuild active trees list for collision
         this.activeTrees = [];
+        this.activeBaobabTrees = [];
         this.activeBuildings = [];
         for (const key in this.chunks) {
             this.activeTrees.push(...this.chunks[key].trees);
+            this.activeBaobabTrees.push(...this.chunks[key].baobabTrees);
             if (this.chunks[key].buildings) this.activeBuildings.push(...this.chunks[key].buildings);
         }
     }
 
     getTrees() {
-        return this.activeTrees;
+        return { activeTrees: this.activeTrees, activeBaobabTrees: this.activeBaobabTrees };
     }
 
     getRunways() {
@@ -104,6 +113,24 @@ export class TerrainManager {
 
     getBuildings() {
         return this.activeBuildings;
+    }
+    
+    unregisterTree(tree) {
+        this.activeTrees = this.activeTrees.filter(t => t !== tree);
+        if (tree.userData && tree.userData.chunk) {
+            const arr = tree.userData.chunk.trees;
+            const idx = arr.indexOf(tree);
+            if (idx >= 0) arr.splice(idx, 1);
+        }
+    }
+    
+    unregisterBaobabTree(tree) {
+        this.activeBaobabTrees = this.activeBaobabTrees.filter(t => t !== tree);
+        if (tree.userData && tree.userData.chunk) {
+            const arr = tree.userData.chunk.baobabTrees;
+            const idx = arr.indexOf(tree);
+            if (idx >= 0) arr.splice(idx, 1);
+        }
     }
 
     registerBuilding(building) {
@@ -137,14 +164,18 @@ export class TerrainManager {
 }
 
 class Chunk {
-    constructor(cx, cz, size, scene, treeModel, runwayTexture, roundTreeModel, buildingModels, manager) {
+    constructor(cx, cz, size, scene, treeModel, runwayTexture, roundTreeModel, buildingModels, manager, palmTreeModel, mushroomTreeModel, baobabTreeModel) {
         this.scene = scene;
         this.treeModel = treeModel;
         this.runwayTexture = runwayTexture;
         this.roundTreeModel = roundTreeModel;
+        this.palmTreeModel = palmTreeModel;
+        this.mushroomTreeModel = mushroomTreeModel;
+        this.baobabTreeModel = baobabTreeModel;
         this.buildingModels = buildingModels;
         this.manager = manager;
         this.trees = [];
+        this.baobabTrees = [];
         this.runways = [];
         this.buildings = [];
         this.mesh = null;
@@ -240,18 +271,22 @@ class Chunk {
 
                 const ty = getHeight(tx, tz);
                 if (ty > -1) {
-                    // Random Tree Type
+                    // Random Tree Type - equal distribution
                     let tree;
-                    // Check if roundTreeModel exists (Chunk constructor update needed to pass it)
-                    // We need to update Chunk constructor first.
-                    // Assuming this.roundTreeModel is available on the Chunk instance
-                    // Wait, I need to update the constructor signature below.
-                    // For now, let's assume it's passed.
-
-                    if (this.roundTreeModel && Math.random() > 0.5) {
-                        tree = this.roundTreeModel.clone();
+                    const treeTypes = [];
+                    
+                    // Build available tree types array
+                    if (this.treeModel) treeTypes.push(this.treeModel);
+                    if (this.roundTreeModel) treeTypes.push(this.roundTreeModel);
+                    if (this.palmTreeModel) treeTypes.push(this.palmTreeModel);
+                    if (this.mushroomTreeModel) treeTypes.push(this.mushroomTreeModel);
+                    
+                    // Pick random tree type
+                    if (treeTypes.length > 0) {
+                        const randomType = treeTypes[Math.floor(Math.random() * treeTypes.length)];
+                        tree = randomType.clone();
                     } else {
-                        tree = this.treeModel.clone();
+                        continue; // No tree models available
                     }
 
                     tree.position.set(tx, ty, tz);
@@ -260,9 +295,42 @@ class Chunk {
                     // Use multiplyScalar to preserve the model's base scale
                     const s = 0.5 + Math.random() * 0.5;
                     tree.scale.multiplyScalar(s);
+                    
+                    // Store reference to chunk for unregistering
+                    tree.userData.chunk = this;
 
                     scene.add(tree);
                     this.trees.push(tree);
+                }
+            }
+        }
+
+        // 3. Scatter Baobab Trees (Boss Trees) - 10 per chunk, separate from regular trees
+        if (this.baobabTreeModel) {
+            for (let i = 0; i < 10; i++) {
+                const tLocalX = (Math.random() - 0.5) * size;
+                const tLocalZ = (Math.random() - 0.5) * size;
+
+                const tx = (cx * size) + tLocalX;
+                const tz = (cz * size) + tLocalZ;
+
+                // Exclusion zone around 0,0 for Runway
+                if (cx === 0 && cz === 0) {
+                    if (Math.abs(tx) < 100 && Math.abs(tz) < 250) continue;
+                }
+
+                const ty = getHeight(tx, tz);
+                if (ty > -1) {
+                    const tree = this.baobabTreeModel.clone();
+                    tree.position.set(tx, ty, tz);
+
+                    // No scale variation for boss trees - keep them impressively large
+                    
+                    // Store reference to chunk for unregistering
+                    tree.userData.chunk = this;
+                    
+                    scene.add(tree);
+                    this.baobabTrees.push(tree);
                 }
             }
         }
@@ -689,6 +757,12 @@ class Chunk {
             // Don't dispose tree geometry/material as it is shared cloned resource
         }
         this.trees = [];
+
+        for (const t of this.baobabTrees) {
+            this.scene.remove(t);
+            // Don't dispose tree geometry/material as it is shared cloned resource
+        }
+        this.baobabTrees = [];
 
         for (const r of this.runways) {
             if (this.manager) {

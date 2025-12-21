@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadF16, loadBuilding, loadTree, loadRoundTree } from './assets.js?v=9';
+import { loadF16, loadBuilding, loadTree, loadRoundTree, loadPalmTree, loadMushroomTree, loadBaobabTree } from './assets.js?v=12';
 
 let renderer, scene, camera, controls;
 let currentAsset = null;
@@ -21,6 +21,21 @@ const loaders = {
     },
     round: async () => {
         const obj = await loadRoundTree();
+        obj.position.set(0, 0, 0);
+        return obj;
+    },
+    palm: async () => {
+        const obj = await loadPalmTree();
+        obj.position.set(0, 0, 0);
+        return obj;
+    },
+    mushroom: async () => {
+        const obj = await loadMushroomTree();
+        obj.position.set(0, 0, 0);
+        return obj;
+    },
+    baobab: async () => {
+        const obj = await loadBaobabTree();
         obj.position.set(0, 0, 0);
         return obj;
     },
