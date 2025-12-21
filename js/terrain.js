@@ -307,20 +307,86 @@ class Chunk {
 
         // 3. Scatter Baobab Trees (Boss Trees) - 10 per chunk, separate from regular trees
         if (this.baobabTreeModel) {
+            const baobabRadius = 25; // Baobab base radius for collision
+            const minSpacing = 40; // Minimum distance from other objects
+            
             for (let i = 0; i < 10; i++) {
-                const tLocalX = (Math.random() - 0.5) * size;
-                const tLocalZ = (Math.random() - 0.5) * size;
+                let attempts = 0;
+                let validPosition = false;
+                let tx, tz, ty;
+                
+                // Try up to 20 times to find a valid position
+                while (!validPosition && attempts < 20) {
+                    const tLocalX = (Math.random() - 0.5) * size;
+                    const tLocalZ = (Math.random() - 0.5) * size;
 
-                const tx = (cx * size) + tLocalX;
-                const tz = (cz * size) + tLocalZ;
+                    tx = (cx * size) + tLocalX;
+                    tz = (cz * size) + tLocalZ;
 
-                // Exclusion zone around 0,0 for Runway
-                if (cx === 0 && cz === 0) {
-                    if (Math.abs(tx) < 100 && Math.abs(tz) < 250) continue;
+                    // Exclusion zone around 0,0 for Runway
+                    if (cx === 0 && cz === 0) {
+                        if (Math.abs(tx) < 100 && Math.abs(tz) < 250) {
+                            attempts++;
+                            continue;
+                        }
+                    }
+
+                    ty = getHeight(tx, tz);
+                    if (ty <= -1) {
+                        attempts++;
+                        continue; // In water
+                    }
+                    
+                    // Check collision with existing regular trees
+                    let tooClose = false;
+                    for (const existingTree of this.trees) {
+                        const dx = tx - existingTree.position.x;
+                        const dz = tz - existingTree.position.z;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+                        
+                        if (dist < minSpacing) {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+                    
+                    // Check collision with existing baobab trees
+                    if (!tooClose) {
+                        for (const existingBaobab of this.baobabTrees) {
+                            const dx = tx - existingBaobab.position.x;
+                            const dz = tz - existingBaobab.position.z;
+                            const dist = Math.sqrt(dx * dx + dz * dz);
+                            
+                            if (dist < baobabRadius * 2 + minSpacing) {
+                                tooClose = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Check collision with buildings
+                    if (!tooClose) {
+                        for (const building of this.buildings) {
+                            const dx = tx - building.position.x;
+                            const dz = tz - building.position.z;
+                            const dist = Math.sqrt(dx * dx + dz * dz);
+                            
+                            if (dist < minSpacing + 20) { // Buildings need more space
+                                tooClose = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!tooClose) {
+                        validPosition = true;
+                    }
+                    
+                    attempts++;
                 }
-
-                const ty = getHeight(tx, tz);
-                if (ty > -1) {
+                
+                // Only spawn if we found a valid position
+                if (validPosition) {
                     const tree = this.baobabTreeModel.clone();
                     tree.position.set(tx, ty, tz);
 
