@@ -10,6 +10,13 @@ let clock;
 let startY = 10;
 let terrainManager;
 
+// Bomb Tracker
+let bombTrackerRenderer = null;
+let bombTrackerCamera = null;
+let bombTrackerContainer = null;
+let activeBomb = null; // Currently tracked bomb
+let bombTrackerHideTime = null; // When to hide the tracker
+
 // Camera Control Variables
 let isLooking = false;
 let camYaw = 0;
@@ -154,6 +161,7 @@ async function init() {
 
     setupMinimap();
     setupReticle();
+    setupBombTracker();
 
     // Start loop
     animate();
@@ -437,6 +445,17 @@ function animate() {
 
     renderer.render(scene, camera);
     drawMinimap();
+    
+    // Render bomb tracker if active
+    if (activeBomb && bombTrackerRenderer && bombTrackerCamera) {
+        updateBombTrackerCamera();
+        bombTrackerRenderer.render(scene, bombTrackerCamera);
+    }
+    
+    // Check if we should hide the bomb tracker
+    if (bombTrackerHideTime && performance.now() >= bombTrackerHideTime) {
+        hideBombTracker();
+    }
 }
 
 // ... existing triggerCrash ... createExplosion ... updateExplosions ... fireLasers ... updateBullets ...
@@ -496,6 +515,59 @@ function setupReticle() {
     reticleCtx.stroke();
 
     document.body.appendChild(reticleCanvas);
+}
+
+function setupBombTracker() {
+    // Get the bomb tracker container from HTML
+    bombTrackerContainer = document.getElementById('bomb-tracker');
+    
+    if (!bombTrackerContainer) {
+        console.warn('Bomb tracker container not found');
+        return;
+    }
+    
+    // Create camera
+    bombTrackerCamera = new THREE.PerspectiveCamera(60, 320 / 240, 0.1, 500);
+    
+    // Create separate renderer
+    bombTrackerRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    bombTrackerRenderer.setSize(320, 240);
+    bombTrackerRenderer.shadowMap.enabled = true;
+    
+    // Append to container
+    bombTrackerContainer.appendChild(bombTrackerRenderer.domElement);
+}
+
+function updateBombTrackerCamera() {
+    if (!bombTrackerCamera || !plane || !activeBomb) return;
+    
+    // Camera positioned 10m behind the plane
+    const offset = new THREE.Vector3(0, 0, 10); // 10 units behind
+    const cameraPos = offset.applyQuaternion(plane.quaternion).add(plane.position);
+    
+    bombTrackerCamera.position.copy(cameraPos);
+    bombTrackerCamera.lookAt(activeBomb.position);
+}
+
+function showBombTracker(bomb) {
+    activeBomb = bomb;
+    bombTrackerHideTime = null;
+    if (bombTrackerContainer) {
+        bombTrackerContainer.style.display = 'block';
+    }
+}
+
+function hideBombTracker() {
+    activeBomb = null;
+    bombTrackerHideTime = null;
+    if (bombTrackerContainer) {
+        bombTrackerContainer.style.display = 'none';
+    }
+}
+
+function scheduleBombTrackerHide() {
+    // Keep showing for 2 more seconds after impact
+    bombTrackerHideTime = performance.now() + 2000;
 }
 
 function updateReticlePosition() {
@@ -1248,6 +1320,9 @@ function dropBomb() {
     scene.add(bomb);
     lastBombTime = now;
     updateHUD(0);
+    
+    // Show bomb tracker
+    showBombTracker(bomb);
 }
 
 function updateBombs(delta) {
@@ -1268,6 +1343,12 @@ function updateBombs(delta) {
         const groundY = getHeight(b.mesh.position.x, b.mesh.position.z);
         if (b.mesh.position.y <= groundY + 0.5) {
             createExplosion(b.mesh.position.clone(), 1.2);
+            
+            // Schedule bomb tracker to hide after 2 seconds
+            if (activeBomb === b.mesh) {
+                scheduleBombTrackerHide();
+            }
+            
             scene.remove(b.mesh);
             b.mesh.traverse(obj => {
                 if (obj.geometry) obj.geometry.dispose();
@@ -1361,6 +1442,11 @@ function updateBombs(delta) {
         }
 
         if (treeHit) {
+            // Schedule bomb tracker to hide after 2 seconds
+            if (activeBomb === b.mesh) {
+                scheduleBombTrackerHide();
+            }
+            
             // Remove bomb
             scene.remove(b.mesh);
             b.mesh.traverse(obj => {
@@ -1385,6 +1471,11 @@ function updateBombs(delta) {
                 if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
                 points += POINTS_PER_BUILDING;
                 updateHUD();
+
+                // Schedule bomb tracker to hide after 2 seconds
+                if (activeBomb === b.mesh) {
+                    scheduleBombTrackerHide();
+                }
 
                 scene.remove(b.mesh);
                 b.mesh.traverse(obj => {
