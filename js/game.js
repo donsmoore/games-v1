@@ -80,35 +80,49 @@ async function init() {
     dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
-    // Environment & Infinite Terrain
-    const treeModel = await loadTree();
-
-    // Load Runway Texture for TerrainManager
+    // Load all assets in PARALLEL for much faster loading!
+    console.log('Loading all game assets in parallel...');
+    const [
+        treeModel,
+        roundTreeModel,
+        palmTreeModel,
+        mushroomTreeModel,
+        baobabTreeModel,
+        lowpolyTreeModel,
+        building2,
+        building3,
+        building5,
+        cityBuilding,
+        ...aiBuildings
+    ] = await Promise.all([
+        loadTree(),
+        loadRoundTree(),
+        loadPalmTree(),
+        loadMushroomTree(),
+        loadBaobabTree(),
+        loadLowpolyTree(),
+        loadBuilding(2),
+        loadBuilding(3),
+        loadBuilding(5),
+        loadCityBuilding(),
+        // AI buildings 1-10
+        loadAIBuilding(1),
+        loadAIBuilding(2),
+        loadAIBuilding(3),
+        loadAIBuilding(4),
+        loadAIBuilding(5),
+        loadAIBuilding(6),
+        loadAIBuilding(7),
+        loadAIBuilding(8),
+        loadAIBuilding(9),
+        loadAIBuilding(10)
+    ]);
+    console.log(`✓ All assets loaded!`);
+    
+    // Load Runway Texture (synchronous, doesn't need await)
     const runwayTex = loadRunwayTexture();
     runwayTex.wrapS = THREE.RepeatWrapping;
     runwayTex.wrapT = THREE.RepeatWrapping;
-
-    // Load all tree types for variety
-    const roundTreeModel = await loadRoundTree();
-    const palmTreeModel = await loadPalmTree();
-    const mushroomTreeModel = await loadMushroomTree();
-    const baobabTreeModel = await loadBaobabTree();
-    const lowpolyTreeModel = await loadLowpolyTree();
-
-    // Load buildings
-    const building2 = await loadBuilding(2);
-    const building3 = await loadBuilding(3);
-    const building5 = await loadBuilding(5);
-    const cityBuilding = await loadCityBuilding();
-    
-    // Load all 10 AI buildings
-    console.log('Loading AI buildings...');
-    const aiBuildings = [];
-    for (let i = 1; i <= 10; i++) {
-        const aiBuild = await loadAIBuilding(i);
-        aiBuildings.push(aiBuild);
-        console.log(`✓ Loaded AI-building-${String(i).padStart(3, '0')}`);
-    }
 
     terrainManager = new TerrainManager(
         scene, 
