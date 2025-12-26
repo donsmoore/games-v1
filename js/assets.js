@@ -182,13 +182,7 @@ export function loadF16() {
         },
         {
             doubleSided: true,
-            materialType: 'phong',
-            onMeshProcessed: (child) => {
-                // Hide stabilizers
-                if (child.name === 'Stabilizers') {
-                    child.visible = false;
-                }
-            }
+            materialType: 'phong'
         }
     );
 }
@@ -211,7 +205,13 @@ export function loadTree() {
         {
             materialType: 'lambert'
         }
-    );
+    ).then((group) => {
+        // Tree collision data
+        group.userData.treeType = 'pine';
+        group.userData.baseRadius = 10.0;
+        group.userData.baseHeight = 45.0;
+        return group;
+    });
 }
 
 /**
@@ -372,6 +372,102 @@ export async function loadBuilding(type = 2) {
         y: size.y * 0.5,
         z: size.z * 0.5
     };
+    
+    return group;
+}
+
+/**
+ * Load Large City Building (external asset)
+ */
+export async function loadCityBuilding() {
+    // Load RV Building with materials
+    const group = await loadOBJWithMaterials(
+        'assets/Rv_Building_3.obj',
+        (child) => {
+            // Fallback material if MTL fails
+            child.material = new THREE.MeshLambertMaterial({
+                color: 0x888888
+            });
+        },
+        {
+            materialType: 'lambert'
+        }
+    );
+    
+    // Compute base half extents for placement/collision
+    const box = new THREE.Box3().setFromObject(group);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    group.userData.baseHalfExtents = {
+        x: size.x * 0.5,
+        y: size.y * 0.5,
+        z: size.z * 0.5
+    };
+    group.userData.buildingType = 'city';
+    
+    return group;
+}
+
+/**
+ * Load AI-generated building (AI-building-001 through AI-building-010)
+ */
+export async function loadAIBuilding(buildingNumber) {
+    const buildingName = `AI-building-${String(buildingNumber).padStart(3, '0')}`;
+    
+    const group = await loadOBJWithMaterials(
+        `assets/${buildingName}.obj`,
+        (child) => {
+            // Fallback material if MTL fails
+            child.material = new THREE.MeshLambertMaterial({
+                color: 0x888888
+            });
+        },
+        {
+            materialType: 'lambert'
+        }
+    );
+    
+    // Compute base half extents for placement/collision
+    const box = new THREE.Box3().setFromObject(group);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    group.userData.baseHalfExtents = {
+        x: size.x * 0.5,
+        y: size.y * 0.5,
+        z: size.z * 0.5
+    };
+    group.userData.buildingType = 'ai';
+    group.userData.buildingNumber = buildingNumber;
+    group.userData.health = 30; // AI buildings take more hits
+    
+    return group;
+}
+
+/**
+ * Load Lowpoly Tree Sample (external asset)
+ */
+export async function loadLowpolyTree() {
+    const group = await loadOBJWithMaterials(
+        'assets/Lowpoly_tree_sample.obj',
+        (child) => {
+            // Fallback materials based on child names
+            if (child.name.toLowerCase().includes('leaf') || child.name.toLowerCase().includes('foliage')) {
+                child.material = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Forest green
+            } else {
+                child.material = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Saddle brown for trunk
+            }
+        },
+        {
+            materialType: 'lambert'
+        }
+    );
+    
+    // Tree collision data (scaled 2x larger)
+    // Note: Tree geometry extends from Y=-1.5 to Y=51.6, total ~53 units
+    // Canopy extends to radius ~35 units (wide leaf coverage)
+    group.userData.treeType = 'lowpoly';
+    group.userData.baseRadius = 22.0;  // Covers most of canopy (compromise between trunk and full leaves)
+    group.userData.baseHeight = 53.0;  // Full height from base to top
     
     return group;
 }

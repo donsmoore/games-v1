@@ -1,0 +1,68 @@
+[
+  {
+    "id": "Building,",
+    "name": "Building",
+    "objFile": "Building,.obj",
+    "mtlFile": "Building,.mtl"
+  },
+  {
+    "id": "Lowpoly_tree_sample",
+    "name": "Lowpoly Tree Sample",
+    "objFile": "Lowpoly_tree_sample.obj",
+    "mtlFile": "Lowpoly_tree_sample.mtl"
+  },
+  {
+    "id": "baobab_tree",
+    "name": "Baobab Tree",
+    "objFile": "baobab_tree.obj",
+    "mtlFile": "baobab_tree.mtl"
+  },
+  {
+    "id": "building_2",
+    "name": "Building 2",
+    "objFile": "building_2.obj",
+    "mtlFile": "building_2.mtl"
+  },
+  {
+    "id": "building_3",
+    "name": "Building 3",
+    "objFile": "building_3.obj",
+    "mtlFile": "building_3.mtl"
+  },
+  {
+    "id": "building_5",
+    "name": "Building 5",
+    "objFile": "building_5.obj",
+    "mtlFile": "building_5.mtl"
+  },
+  {
+    "id": "f16",
+    "name": "F16",
+    "objFile": "f16.obj",
+    "mtlFile": "f16.mtl"
+  },
+  {
+    "id": "mushroom_tree",
+    "name": "Mushroom Tree",
+    "objFile": "mushroom_tree.obj",
+    "mtlFile": "mushroom_tree.mtl"
+  },
+  {
+    "id": "palm_tree",
+    "name": "Palm Tree",
+    "objFile": "palm_tree.obj",
+    "mtlFile": "palm_tree.mtl"
+  },
+  {
+    "id": "pine_tree",
+    "name": "Pine Tree",
+    "objFile": "pine_tree.obj",
+    "mtlFile": "pine_tree.mtl"
+  },
+  {
+    "id": "round_tree",
+    "name": "Round Tree",
+    "objFile": "round_tree.obj",
+    "mtlFile": "round_tree.mtl"
+  }
+]

@@ -669,3 +669,24 @@ fs.writeFileSync(path.join(assetsDir, 'building_5.obj'), b5Obj);
 fs.writeFileSync(path.join(assetsDir, 'building_5.mtl'), createMTL(buildingMaterials));
 
 console.log('✓ Buildings OBJ + MTL exported (2F, 3F, 5F)');
+
+// Generate asset manifest for dynamic loading in asset viewer
+const assetFiles = fs.readdirSync(assetsDir).filter(file => file.endsWith('.obj'));
+const manifest = assetFiles.map(file => {
+    const baseName = file.replace('.obj', '');
+    const displayName = baseName
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    
+    return {
+        id: baseName,
+        name: displayName,
+        objFile: file,
+        mtlFile: `${baseName}.mtl`
+    };
+});
+
+fs.writeFileSync(path.join(assetsDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+console.log('✓ Asset manifest generated');
+console.log(`  Found ${manifest.length} assets`);

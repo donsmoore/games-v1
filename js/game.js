@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { TerrainManager, getHeight } from './terrain.js?v=25';
-import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree } from './assets.js?v=12';
+import { TerrainManager, getHeight } from './terrain.js?v=31';
+import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadCityBuilding, loadLowpolyTree, loadAIBuilding } from './assets.js?v=220';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 
 // Global variables
@@ -93,11 +93,22 @@ async function init() {
     const palmTreeModel = await loadPalmTree();
     const mushroomTreeModel = await loadMushroomTree();
     const baobabTreeModel = await loadBaobabTree();
+    const lowpolyTreeModel = await loadLowpolyTree();
 
     // Load buildings
     const building2 = await loadBuilding(2);
     const building3 = await loadBuilding(3);
     const building5 = await loadBuilding(5);
+    const cityBuilding = await loadCityBuilding();
+    
+    // Load all 10 AI buildings
+    console.log('Loading AI buildings...');
+    const aiBuildings = [];
+    for (let i = 1; i <= 10; i++) {
+        const aiBuild = await loadAIBuilding(i);
+        aiBuildings.push(aiBuild);
+        console.log(`✓ Loaded AI-building-${String(i).padStart(3, '0')}`);
+    }
 
     terrainManager = new TerrainManager(
         scene, 
@@ -107,7 +118,10 @@ async function init() {
         [building2, building3, building5],
         palmTreeModel,
         mushroomTreeModel,
-        baobabTreeModel
+        baobabTreeModel,
+        lowpolyTreeModel,
+        cityBuilding,
+        aiBuildings
     );
     terrainManager.update(new THREE.Vector3(0, 0, 0));
 
@@ -243,7 +257,7 @@ function animate() {
             }
 
             const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
-            camera.position.lerp(cameraOffset, 0.1);
+            camera.position.lerp(cameraOffset, 0.35); // Increased from 0.2 to 0.35 for even faster follow
             camera.lookAt(plane.position);
 
             // Altitude Logic (Ceiling)
@@ -353,19 +367,20 @@ function animate() {
                     const dz = plane.position.z - tree.position.z;
                     const distXZ = Math.sqrt(dx * dx + dz * dz);
 
-                    // Adjust hit box based on tree type
-                    // Pine tree: base 10 radius, 45 height
-                    // Round tree: base 3.5 radius, 8.5 height (from userData)
+                    // Use tree userData for accurate hitbox, or fallback to pine tree defaults
                     let baseRadius = 10;
                     let baseHeight = 45;
-                    if (tree.userData && tree.userData.treeType === 'round') {
-                        baseRadius = tree.userData.baseRadius || 3.5;
-                        baseHeight = tree.userData.baseHeight || 8.5;
+                    
+                    if (tree.userData && tree.userData.baseRadius) {
+                        baseRadius = tree.userData.baseRadius;
+                        baseHeight = tree.userData.baseHeight;
                     }
+                    
                     const hitRadius = baseRadius * tree.scale.x;
                     const hitHeight = baseHeight * tree.scale.y;
 
-                    if (distXZ < hitRadius && plane.position.y < tree.position.y + hitHeight) {
+                    // Allow collisions slightly below tree position (some trees have geometry below pivot)
+                    if (distXZ < hitRadius && plane.position.y > tree.position.y - 2 && plane.position.y < tree.position.y + hitHeight) {
                         console.log("Tree Hit!");
                         triggerCrash();
                         break;
@@ -387,7 +402,8 @@ function animate() {
                     const hitRadius = baseRadius * tree.scale.x;
                     const hitHeight = baseHeight * tree.scale.y;
 
-                    if (distXZ < hitRadius && plane.position.y < tree.position.y + hitHeight) {
+                    // Allow collisions slightly below tree position
+                    if (distXZ < hitRadius && plane.position.y > tree.position.y - 2 && plane.position.y < tree.position.y + hitHeight) {
                         console.log("Baobab Tree Hit!");
                         triggerCrash();
                         break;
@@ -989,8 +1005,8 @@ function fireLasers() {
 
         console.log("Spawning laser at:", pos.x.toFixed(2), pos.y.toFixed(2), pos.z.toFixed(2));
 
-        // Laser Mesh (Red Bolt) - Thicker (0.4)
-        const geo = new THREE.CylinderGeometry(0.4, 0.4, 8, 8);
+        // Laser Mesh (Red Bolt) - 2x larger for better visibility
+        const geo = new THREE.CylinderGeometry(0.8, 0.8, 16, 8); // 2x radius (0.4->0.8) and 2x length (8->16)
         geo.rotateX(Math.PI / 2); // Align length with Z
         const mat = new THREE.MeshBasicMaterial({ color: 0xFF0000 }); // Red
         const laser = new THREE.Mesh(geo, mat);
@@ -1052,7 +1068,8 @@ function updateBullets(delta) {
             const hitRadius = baseRadius * effectiveScale;
             const hitHeight = baseHeight * effectiveScale;
 
-            if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+            // Allow hits slightly below tree position (some trees have geometry below pivot)
+            if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                 // Hit!
                 console.log("Laser hit tree!");
                 
@@ -1093,7 +1110,8 @@ function updateBullets(delta) {
                 const hitRadius = baseRadius * effectiveScale;
                 const hitHeight = baseHeight * effectiveScale;
 
-                if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                // Allow hits slightly below tree position
+                if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                     console.log("Laser hit Baobab tree!");
                     
                     // Damage boss tree
@@ -1384,7 +1402,8 @@ function updateBombs(delta) {
             const hitRadius = baseRadius * effectiveScale * 2; // 100% larger for bombs
             const hitHeight = baseHeight * effectiveScale * 2;
 
-            if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+            // Allow hits slightly below tree position
+            if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                 // Regular tree - instant destroy
                 createExplosion(tree.position.clone().setY(tree.position.y + 5), 1.5);
                 scene.remove(tree);
@@ -1418,7 +1437,8 @@ function updateBombs(delta) {
                 const hitRadius = baseRadius * effectiveScale * 2; // 100% larger for bombs
                 const hitHeight = baseHeight * effectiveScale * 2;
 
-                if (dist < hitRadius && b.mesh.position.y > tree.position.y && b.mesh.position.y < tree.position.y + hitHeight) {
+                // Allow hits slightly below tree position
+                if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                     // Damage boss tree (bombs do 3 HP damage)
                     const destroyed = damageTree(tree, 3);
                     

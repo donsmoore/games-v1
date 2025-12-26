@@ -1,0 +1,98 @@
+# Material Library for Building.obj
+# DARKER colors so they're actually visible
+
+newmtl Material.004
+Kd 0.45 0.45 0.42
+Ka 0.15 0.15 0.14
+Ks 0.20 0.20 0.20
+Ns 60
+d 1
+illum 2
+
+newmtl Material.005
+Kd 0.48 0.48 0.45
+Ka 0.16 0.16 0.15
+Ks 0.20 0.20 0.20
+Ns 60
+d 1
+illum 2
+
+newmtl Material.008
+Kd 0.15 0.30 0.50
+Ka 0.05 0.10 0.17
+Ks 0.50 0.60 0.70
+Ns 150
+d 1
+illum 2
+
+newmtl Material
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.001
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.002
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.003
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.006
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.007
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.009
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.010
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2
+
+newmtl Material.011
+Kd 0.50 0.50 0.50
+Ka 0.17 0.17 0.17
+Ks 0.25 0.25 0.25
+Ns 80
+d 1
+illum 2

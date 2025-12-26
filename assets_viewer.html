@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assets Viewer</title>
+    <link rel="icon" type="image/png" href="assets/favicon.png">
     <style>
         body, html {
             margin: 0;
@@ -49,17 +50,9 @@
 <body>
     <div id="info">Middle mouse: rotate | Mouse wheel: zoom | Left drag: pan</div>
     <select id="asset-picker">
-        <option value="f16">F-16</option>
-        <option value="pine">Pine Tree</option>
-        <option value="round">Round Tree</option>
-        <option value="palm">Palm Tree</option>
-        <option value="mushroom">Mushroom Tree</option>
-        <option value="baobab">Baobab Tree (Boss)</option>
-        <option value="b2">Building 2-story</option>
-        <option value="b3">Building 3-story</option>
-        <option value="b5">Building 5-story</option>
+        <!-- Options populated dynamically from manifest.json -->
     </select>
-    <script type="module" src="js/assets_viewer.js?v=5"></script>
+    <script type="module" src="js/assets_viewer.js?v=50"></script>
 </body>
 </html>
 

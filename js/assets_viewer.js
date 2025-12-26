@@ -1,60 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadF16, loadBuilding, loadTree, loadRoundTree, loadPalmTree, loadMushroomTree, loadBaobabTree } from './assets.js?v=12';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
 let renderer, scene, camera, controls;
 let currentAsset = null;
+let assetManifest = [];
 
 const LS_KEY = 'assets-viewer-default';
 const assetPicker = document.getElementById('asset-picker');
-
-const loaders = {
-    f16: async () => {
-        const obj = await loadF16();
-        obj.position.set(0, 5, 0);
-        return obj;
-    },
-    pine: async () => {
-        const obj = await loadTree();
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    round: async () => {
-        const obj = await loadRoundTree();
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    palm: async () => {
-        const obj = await loadPalmTree();
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    mushroom: async () => {
-        const obj = await loadMushroomTree();
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    baobab: async () => {
-        const obj = await loadBaobabTree();
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    b2: async () => {
-        const obj = await loadBuilding(2);
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    b3: async () => {
-        const obj = await loadBuilding(3);
-        obj.position.set(0, 0, 0);
-        return obj;
-    },
-    b5: async () => {
-        const obj = await loadBuilding(5);
-        obj.position.set(0, 0, 0);
-        return obj;
-    }
-};
 
 init();
 animate();
@@ -106,20 +60,56 @@ async function init() {
         RIGHT: THREE.MOUSE.PAN
     };
 
-    // Picker
-    const saved = localStorage.getItem(LS_KEY) || 'f16';
-    if (assetPicker) {
+    // Load asset manifest and populate picker
+    await loadManifest();
+    populatePicker();
+
+    // Load saved or first asset
+    const saved = localStorage.getItem(LS_KEY) || (assetManifest[0]?.id);
+    if (assetPicker && saved) {
         assetPicker.value = saved;
-        assetPicker.addEventListener('change', () => {
-            const val = assetPicker.value;
-            localStorage.setItem(LS_KEY, val);
-            loadAsset(val);
-        });
+        await loadAsset(saved);
     }
 
-    await loadAsset(saved);
-
     window.addEventListener('resize', onResize);
+}
+
+async function loadManifest() {
+    try {
+        // Dynamically scan assets folder via PHP script
+        const response = await fetch(`assets/list_assets.php?t=${Date.now()}`);
+        assetManifest = await response.json();
+        console.log(`✓ Dynamically loaded ${assetManifest.length} assets`);
+        assetManifest.forEach(asset => {
+            console.log(`  - ${asset.name} (${asset.objFile})`);
+        });
+    } catch (error) {
+        console.error('Failed to load assets:', error);
+        console.log('Tip: Make sure PHP is enabled on your server');
+        assetManifest = [];
+    }
+}
+
+function populatePicker() {
+    if (!assetPicker) return;
+
+    // Clear existing options
+    assetPicker.innerHTML = '';
+
+    // Add options from manifest
+    assetManifest.forEach(asset => {
+        const option = document.createElement('option');
+        option.value = asset.id;
+        option.textContent = asset.name;
+        assetPicker.appendChild(option);
+    });
+
+    // Add change listener
+    assetPicker.addEventListener('change', () => {
+        const val = assetPicker.value;
+        localStorage.setItem(LS_KEY, val);
+        loadAsset(val);
+    });
 }
 
 function fitCameraToObject(object, camera, controls) {
@@ -156,15 +146,138 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-async function loadAsset(key) {
-    if (!loaders[key]) return;
-    const obj = await loaders[key]();
-
-    if (currentAsset) {
-        scene.remove(currentAsset);
+async function loadAsset(assetId) {
+    const asset = assetManifest.find(a => a.id === assetId);
+    if (!asset) {
+        console.error(`Asset not found: ${assetId}`);
+        return;
     }
-    currentAsset = obj;
-    scene.add(obj);
-    fitCameraToObject(obj, camera, controls);
+
+    try {
+        console.log(`Loading asset: ${asset.name}`);
+        
+        // Remove current asset
+        if (currentAsset) {
+            scene.remove(currentAsset);
+        }
+
+        // Load OBJ with MTL
+        const obj = await loadOBJWithMTL(`assets/${asset.objFile}`, `assets/${asset.mtlFile}`);
+        obj.position.set(0, 0, 0);
+        
+        // Debug: Check what we got
+        console.log(`Object loaded, children: ${obj.children.length}`);
+        let meshCount = 0;
+        obj.traverse(child => {
+            if (child.isMesh) {
+                meshCount++;
+                console.log(`  Mesh ${meshCount}: ${child.name}, has material: ${!!child.material}, wireframe: ${child.material?.wireframe}, hasTexture: ${!!child.material?.map}`);
+            }
+        });
+        console.log(`Total meshes found: ${meshCount}`);
+
+        // Special positioning for certain assets
+        if (asset.id === 'f16') {
+            obj.position.y = 5;
+        }
+
+        currentAsset = obj;
+        scene.add(obj);
+        fitCameraToObject(obj, camera, controls);
+        
+        console.log(`✓ Loaded: ${asset.name}`);
+    } catch (error) {
+        console.error(`Failed to load asset ${asset.name}:`, error);
+    }
 }
 
+function loadOBJWithMTL(objPath, mtlPath) {
+    return new Promise((resolve, reject) => {
+        const mtlLoader = new MTLLoader();
+        const objLoader = new OBJLoader();
+
+        // Extract base path for MTL loader
+        const basePath = objPath.substring(0, objPath.lastIndexOf('/') + 1);
+        mtlLoader.setPath(basePath);
+
+        // Extract just the filename for MTL
+        const mtlFilename = mtlPath.substring(mtlPath.lastIndexOf('/') + 1);
+
+        // Try to load MTL first
+        mtlLoader.load(
+            encodeURIComponent(mtlFilename) + '?v=' + Date.now(),
+            (materials) => {
+                console.log(`✓ MTL loaded: ${mtlFilename}`);
+                materials.preload();
+                
+                // Debug: Check materials and textures
+                Object.keys(materials.materials).forEach(matName => {
+                    const mat = materials.materials[matName];
+                    if (mat.map) {
+                        console.log(`  Material ${matName} has diffuse texture`);
+                    } else {
+                        console.log(`  Material ${matName} - no textures, using color`);
+                    }
+                });
+                
+                objLoader.setMaterials(materials);
+                
+                // Load OBJ with materials
+                objLoader.load(
+                    objPath + '?v=' + Date.now(),
+                    (object) => {
+                        console.log(`OBJ loaded, type: ${object.type}, children: ${object.children.length}`);
+                        
+                        // Enable shadows and check materials
+                        object.traverse((child) => {
+                            console.log(`  Traversing: ${child.type} - ${child.name}`);
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                                
+                                // Debug: Check if wireframe is on
+                                if (child.material) {
+                                    if (child.material.wireframe) {
+                                        console.warn(`  Wireframe is ON for ${child.name}!`);
+                                        child.material.wireframe = false;
+                                    }
+                                    
+                                    // Check if texture loaded
+                                    if (child.material.map) {
+                                        console.log(`  ✓ ${child.name} has texture map`);
+                                    } else {
+                                        console.log(`  ⚠ ${child.name} has NO texture (using color only)`);
+                                    }
+                                }
+                            }
+                        });
+                        resolve(object);
+                    },
+                    undefined,
+                    reject
+                );
+            },
+            undefined,
+            (error) => {
+                // MTL failed, try loading OBJ without materials
+                console.warn(`MTL not found for ${objPath}, loading OBJ only`);
+                objLoader.load(
+                    objPath + '?v=' + Date.now(),
+                    (object) => {
+                        // Apply default material
+                        object.traverse((child) => {
+                            if (child.isMesh) {
+                                child.material = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                            }
+                        });
+                        resolve(object);
+                    },
+                    undefined,
+                    reject
+                );
+            }
+        );
+    });
+}
