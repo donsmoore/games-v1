@@ -119,6 +119,16 @@ async function init() {
     ]);
     console.log(`✓ All assets loaded!`);
     
+    // Hide loading overlay
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.opacity = '0';
+        loadingOverlay.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+        }, 500);
+    }
+    
     // Load Runway Texture (synchronous, doesn't need await)
     const runwayTex = loadRunwayTexture();
     runwayTex.wrapS = THREE.RepeatWrapping;
