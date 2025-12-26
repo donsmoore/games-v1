@@ -823,9 +823,9 @@ class Chunk {
                 const bx = cityX + (Math.random() - 0.5) * 80;
                 const bz = cityZ + (Math.random() - 0.5) * 80;
 
-                // Avoid placing too close to runway or mountain
+                // Avoid placing too close to ANY runway (cross-chunk check)
                 let skip = false;
-                for (const r of this.runways) {
+                for (const r of runwaysForCheck) { // Changed from this.runways to runwaysForCheck
                     const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
                     if (dist < 100) { skip = true; break; }
                 }
@@ -842,13 +842,29 @@ class Chunk {
             }
         }
 
-        // Fallback: ensure at least one building per chunk
+        // Fallback: ensure at least one building per chunk (with runway check)
         if (this.buildings.length === buildingsBefore) {
-            const bx = cx * size + (Math.random() - 0.5) * 200;
-            const bz = cz * size + (Math.random() - 0.5) * 200;
-            const groundY = getHeight(bx, bz);
-            if (groundY > -2) {
-                placeBuilding(bx, bz, 1);
+            let attempts = 0;
+            while (attempts < 10) {
+                const bx = cx * size + (Math.random() - 0.5) * 200;
+                const bz = cz * size + (Math.random() - 0.5) * 200;
+                
+                // Check runway distance
+                let tooClose = false;
+                for (const r of runwaysForCheck) {
+                    const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
+                    if (dist < 100) { tooClose = true; break; }
+                }
+                
+                if (!tooClose) {
+                    const groundY = getHeight(bx, bz);
+                    if (groundY > -2) {
+                        placeBuilding(bx, bz, 1);
+                        break; // Successfully placed, exit loop
+                    }
+                }
+                
+                attempts++;
             }
         }
 

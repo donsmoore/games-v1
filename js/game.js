@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TerrainManager, getHeight } from './terrain.js?v=31';
+import { TerrainManager, getHeight } from './terrain.js?v=32';
 import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadCityBuilding, loadLowpolyTree, loadAIBuilding } from './assets.js?v=220';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 
