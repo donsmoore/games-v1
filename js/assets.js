@@ -36,16 +36,19 @@ async function loadOBJWithMaterials(objPath, fallbackMaterialFn, options = {}) {
                 materials.preload();
                 objLoader.setMaterials(materials);
                 
-                // Load OBJ with materials
-                objLoader.load(
-                    objPath + '?v=' + Date.now(),
-                    (group) => {
-                        processLoadedGroup(group, null, options);
-                        resolve(group);
-                    },
-                    undefined,
-                    (error) => reject(error)
-                );
+                // Small delay to ensure materials are fully preloaded
+                setTimeout(() => {
+                    // Load OBJ with materials
+                    objLoader.load(
+                        objPath + '?v=' + Date.now(),
+                        (group) => {
+                            processLoadedGroup(group, null, options);
+                            resolve(group);
+                        },
+                        undefined,
+                        (error) => reject(error)
+                    );
+                }, 10); // 10ms delay to let materials fully preload
             },
             
             // MTL loading in progress
@@ -372,38 +375,6 @@ export async function loadBuilding(type = 2) {
         y: size.y * 0.5,
         z: size.z * 0.5
     };
-    
-    return group;
-}
-
-/**
- * Load Large City Building (external asset)
- */
-export async function loadCityBuilding() {
-    // Load RV Building with materials
-    const group = await loadOBJWithMaterials(
-        'assets/Rv_Building_3.obj',
-        (child) => {
-            // Fallback material if MTL fails
-            child.material = new THREE.MeshLambertMaterial({
-                color: 0x888888
-            });
-        },
-        {
-            materialType: 'lambert'
-        }
-    );
-    
-    // Compute base half extents for placement/collision
-    const box = new THREE.Box3().setFromObject(group);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    group.userData.baseHalfExtents = {
-        x: size.x * 0.5,
-        y: size.y * 0.5,
-        z: size.z * 0.5
-    };
-    group.userData.buildingType = 'city';
     
     return group;
 }

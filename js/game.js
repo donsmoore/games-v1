@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { TerrainManager, getHeight } from './terrain.js?v=32';
-import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadCityBuilding, loadLowpolyTree, loadAIBuilding } from './assets.js?v=220';
+import { TerrainManager, getHeight } from './terrain.js?v=33';
+import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding } from './assets.js?v=222';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 
 // Global variables
@@ -80,44 +80,28 @@ async function init() {
     dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
-    // Load all assets in PARALLEL for much faster loading!
-    console.log('Loading all game assets in parallel...');
-    const [
-        treeModel,
-        roundTreeModel,
-        palmTreeModel,
-        mushroomTreeModel,
-        baobabTreeModel,
-        lowpolyTreeModel,
-        building2,
-        building3,
-        building5,
-        cityBuilding,
-        ...aiBuildings
-    ] = await Promise.all([
-        loadTree(),
-        loadRoundTree(),
-        loadPalmTree(),
-        loadMushroomTree(),
-        loadBaobabTree(),
-        loadLowpolyTree(),
-        loadBuilding(2),
-        loadBuilding(3),
-        loadBuilding(5),
-        loadCityBuilding(),
-        // AI buildings 1-10
-        loadAIBuilding(1),
-        loadAIBuilding(2),
-        loadAIBuilding(3),
-        loadAIBuilding(4),
-        loadAIBuilding(5),
-        loadAIBuilding(6),
-        loadAIBuilding(7),
-        loadAIBuilding(8),
-        loadAIBuilding(9),
-        loadAIBuilding(10)
-    ]);
-    console.log(`✓ All assets loaded!`);
+    // Load all assets SEQUENTIALLY to ensure materials load properly
+    console.log('Loading all game assets...');
+    
+    const treeModel = await loadTree();
+    const roundTreeModel = await loadRoundTree();
+    const palmTreeModel = await loadPalmTree();
+    const mushroomTreeModel = await loadMushroomTree();
+    const baobabTreeModel = await loadBaobabTree();
+    const lowpolyTreeModel = await loadLowpolyTree();
+    
+    const building2 = await loadBuilding(2);
+    const building3 = await loadBuilding(3);
+    const building5 = await loadBuilding(5);
+    
+    // Load AI buildings
+    const aiBuildings = [];
+    for (let i = 1; i <= 10; i++) {
+        aiBuildings.push(await loadAIBuilding(i));
+    }
+    
+    console.log(`✓ All assets loaded successfully!`);
+    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}`);
     
     // Hide loading overlay
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -144,7 +128,7 @@ async function init() {
         mushroomTreeModel,
         baobabTreeModel,
         lowpolyTreeModel,
-        cityBuilding,
+        null, // No city building
         aiBuildings
     );
     terrainManager.update(new THREE.Vector3(0, 0, 0));
