@@ -180,9 +180,6 @@ async function loadAsset(assetId) {
         if (asset.id === 'f16') {
             obj.position.y = 5;
         }
-        if (asset.id === 'xwing') {
-            obj.position.y = 5; // Elevate X-Wing like F-16
-        }
         if (asset.id === 'a10') {
             obj.position.y = 5; // Elevate A-10 like other aircraft
         }
