@@ -1,0 +1,50 @@
+# X-Wing Fighter Materials
+
+newmtl Fuselage
+Ka 0.8 0.8 0.8
+Kd 0.9 0.9 0.9
+Ks 0.5 0.5 0.5
+Ns 50.0
+d 1.0
+illum 2
+
+newmtl Cockpit
+Ka 0.1 0.2 0.3
+Kd 0.2 0.4 0.6
+Ks 0.8 0.9 1.0
+Ns 200.0
+d 0.7
+illum 2
+
+newmtl Wings
+Ka 0.7 0.7 0.7
+Kd 0.85 0.85 0.85
+Ks 0.4 0.4 0.4
+Ns 40.0
+d 1.0
+illum 2
+
+newmtl Engines
+Ka 0.2 0.2 0.2
+Kd 0.3 0.3 0.35
+Ks 0.6 0.6 0.7
+Ns 80.0
+d 1.0
+illum 2
+
+newmtl EngineGlow
+Ka 0.2 0.4 1.0
+Kd 0.4 0.6 1.0
+Ks 0.8 0.9 1.0
+Ns 100.0
+d 1.0
+illum 2
+
+newmtl Weapons
+Ka 0.4 0.2 0.1
+Kd 0.6 0.3 0.2
+Ks 0.7 0.5 0.4
+Ns 60.0
+d 1.0
+illum 2
+
