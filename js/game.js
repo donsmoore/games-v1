@@ -34,7 +34,7 @@ let bullets = [];
 let bombs = [];
 let lastBombTime = performance.now() - 3000;
 let laserEnergy = 100;
-let jetFlame = null;
+let jetFlames = []; // Array to support multiple engine flames (F-16: 1, A-10: 2)
 let points = 0;
 
 // HUD Overlays
@@ -798,36 +798,40 @@ function updateTaxi(delta) {
 
 // Jet Engine Flame
 function createJetFlame() {
-    // Create a flame cone pointing backward from the jet
-    // Reduced size - max 3 units
+    // Clear any existing flames
+    jetFlames.forEach(flame => {
+        if (flame.parent) flame.parent.remove(flame);
+        flame.geometry.dispose();
+        flame.material.dispose();
+    });
+    jetFlames = [];
+
+    // Flame geometry setup
     const flameLength = 3;
     const flameRadius = 1;
 
-    const flameGeo = new THREE.ConeGeometry(flameRadius, flameLength, 8);
+    const createFlameGeometry = () => {
+        const flameGeo = new THREE.ConeGeometry(flameRadius, flameLength, 8);
+        flameGeo.translate(0, -flameLength / 2, 0);
 
-    // Translate geometry so the TIP is at local origin (not the center)
-    flameGeo.translate(0, -flameLength / 2, 0);
+        // Create gradient effect using vertex colors - red/yellow spectrum
+        const colors = [];
+        const positions = flameGeo.attributes.position;
+        for (let i = 0; i < positions.count; i++) {
+            const y = positions.getY(i);
+            const t = (y + flameLength) / flameLength; // 0 at base, 1 at tip
 
-    // Create gradient effect using vertex colors - red/yellow spectrum
-    const colors = [];
-    const positions = flameGeo.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-        const y = positions.getY(i);
-        // y now ranges from -flameLength to 0 (tip at 0, base at -flameLength)
-        const t = (y + flameLength) / flameLength; // 0 at base, 1 at tip
-
-        if (t > 0.7) {
-            // Bright yellow at tip (near jet)
-            colors.push(1.0, 1.0, 0.0); // Pure yellow
-        } else if (t > 0.4) {
-            // Orange middle
-            colors.push(1.0, 0.5, 0.0);
-        } else {
-            // Red at base (far end)
-            colors.push(1.0, 0.1, 0.0);
+            if (t > 0.7) {
+                colors.push(1.0, 1.0, 0.0); // Bright yellow at tip
+            } else if (t > 0.4) {
+                colors.push(1.0, 0.5, 0.0); // Orange middle
+            } else {
+                colors.push(1.0, 0.1, 0.0); // Red at base
+            }
         }
-    }
-    flameGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        flameGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        return flameGeo;
+    };
 
     const flameMat = new THREE.MeshBasicMaterial({
         vertexColors: true,
@@ -835,40 +839,57 @@ function createJetFlame() {
         opacity: 0.9
     });
 
-    jetFlame = new THREE.Mesh(flameGeo, flameMat);
+    // Create flames based on jet type
+    if (ACTIVE_JET === 'A10') {
+        // A-10: Two engines on nacelles (rear, outboard)
+        // Left engine
+        const leftFlame = new THREE.Mesh(createFlameGeometry(), flameMat.clone());
+        leftFlame.rotation.x = -Math.PI / 2;
+        leftFlame.position.set(-2.5, -0.3, 3.5); // Left nacelle: outboard, slightly down, rear
+        leftFlame.scale.set(0, 0, 0);
+        plane.add(leftFlame);
+        jetFlames.push(leftFlame);
 
-    // Position at back of jet, rotated to point backward
-    // The cone TIP is now at local origin, base extends along -Y
-    // Rotate so base extends along +Z (backward from jet), then flip 180°
-    jetFlame.rotation.x = -Math.PI / 2; // Flipped to extend backward
-    jetFlame.position.set(0, 0, 1.5); // Tip touches rear of fuselage
-
-    // Start invisible (no speed = no flame)
-    jetFlame.scale.set(0, 0, 0);
-
-    // Add as child of plane so it moves with it
-    plane.add(jetFlame);
+        // Right engine
+        const rightFlame = new THREE.Mesh(createFlameGeometry(), flameMat.clone());
+        rightFlame.rotation.x = -Math.PI / 2;
+        rightFlame.position.set(2.5, -0.3, 3.5); // Right nacelle: outboard, slightly down, rear
+        rightFlame.scale.set(0, 0, 0);
+        plane.add(rightFlame);
+        jetFlames.push(rightFlame);
+    } else {
+        // F-16: Single center engine
+        const centerFlame = new THREE.Mesh(createFlameGeometry(), flameMat);
+        centerFlame.rotation.x = -Math.PI / 2;
+        centerFlame.position.set(0, 0, 1.5); // Center rear
+        centerFlame.scale.set(0, 0, 0);
+        plane.add(centerFlame);
+        jetFlames.push(centerFlame);
+    }
 }
 
 function updateJetFlame() {
-    if (!jetFlame) return;
+    if (jetFlames.length === 0) return;
 
     // Scale based on speed (0 at idle, 1 at MAX_SPEED)
     const MAX_SPEED = 2.0; // Same as controls.js
     const speedRatio = Math.min(1, planeSpeed / MAX_SPEED);
 
-    // No flame when speed is 0
-    if (speedRatio <= 0.01) {
-        jetFlame.scale.set(0, 0, 0);
-    } else {
-        // Scale flame uniformly - since geometry origin is at base, only tip extends
-        jetFlame.scale.set(speedRatio, speedRatio, speedRatio);
-    }
+    // Update all flames (F-16 has 1, A-10 has 2)
+    jetFlames.forEach(flame => {
+        // No flame when speed is 0
+        if (speedRatio <= 0.01) {
+            flame.scale.set(0, 0, 0);
+        } else {
+            // Scale flame uniformly
+            flame.scale.set(speedRatio, speedRatio, speedRatio);
+        }
 
-    // Add slight flicker effect
-    const flicker = 0.9 + Math.random() * 0.2;
-    jetFlame.scale.x *= flicker;
-    jetFlame.scale.z *= flicker;
+        // Add slight flicker effect (each flame flickers independently)
+        const flicker = 0.9 + Math.random() * 0.2;
+        flame.scale.x *= flicker;
+        flame.scale.z *= flicker;
+    });
 }
 
 function triggerCrash() {
