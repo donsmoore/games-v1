@@ -1188,12 +1188,22 @@ function updateBullets(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
-                createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
-                scene.remove(bld);
-                if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-                points += POINTS_PER_BUILDING;
-                updateHUD();
-                hit = true;
+                // Check if building has health (AI buildings)
+                if (bld.userData.health !== undefined && bld.userData.health > 1) {
+                    // AI Building with health - damage it
+                    bld.userData.health -= 1;
+                    console.log(`AI Building hit! Health remaining: ${bld.userData.health}`);
+                    createExplosion(b.mesh.position.clone(), 0.4); // Small impact effect
+                    hit = true;
+                } else {
+                    // Regular building OR AI building at 1 HP - destroy it
+                    createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
+                    scene.remove(bld);
+                    if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
+                    points += POINTS_PER_BUILDING;
+                    updateHUD();
+                    hit = true;
+                }
             }
         }
 
@@ -1527,11 +1537,20 @@ function updateBombs(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
-                createExplosion(box.getCenter(new THREE.Vector3()), 0.75); // 50% smaller (was 1.5)
-                scene.remove(bld);
-                if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-                points += POINTS_PER_BUILDING;
-                updateHUD();
+                // Check if building has health (AI buildings)
+                if (bld.userData.health !== undefined && bld.userData.health > 10) {
+                    // AI Building with health - damage it (bombs do 10 damage)
+                    bld.userData.health -= 10;
+                    console.log(`Bomb hit AI Building! Health remaining: ${bld.userData.health}`);
+                    createExplosion(b.mesh.position.clone(), 0.75); // Bomb explosion
+                } else {
+                    // Regular building OR AI building at <=10 HP - destroy it
+                    createExplosion(box.getCenter(new THREE.Vector3()), 0.75); // 50% smaller (was 1.5)
+                    scene.remove(bld);
+                    if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
+                    points += POINTS_PER_BUILDING;
+                    updateHUD();
+                }
 
                 // Schedule bomb tracker to hide after 2 seconds
                 if (activeBomb === b.mesh) {
