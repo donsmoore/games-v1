@@ -236,6 +236,11 @@ function animate() {
 
     const delta = clock.getDelta();
 
+    // Regenerate laser energy at 1% per second
+    if (laserEnergy < 100) {
+        laserEnergy = Math.min(100, laserEnergy + delta * 1.0); // 1% per second
+    }
+
     // Update game logic
     if (plane && !isCrashed) {
         if (isTaxiing) {
