@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { TerrainManager, getHeight } from './terrain.js?v=33';
-import { loadF16, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding } from './assets.js?v=222';
+import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding } from './assets.js?v=223';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
+import { ACTIVE_JET, getActiveJetConfig, getCannonPositions } from './jetconfig.js?v=1';
 
 // Global variables
 let camera, scene, renderer;
@@ -147,6 +148,17 @@ async function init() {
         }
     }
 
+    // Load active jet based on configuration
+    const jetConfig = getActiveJetConfig();
+    console.log(`Loading active jet: ${jetConfig.name}`);
+    
+    // Load the appropriate jet model
+    if (ACTIVE_JET === 'A10') {
+        plane = await loadA10();
+    } else {
+        plane = await loadF16();
+    }
+    
     if (startRunway) {
         // Align plane with runway
         // Runway Local Y+ is Up. Surface is +15.
@@ -159,7 +171,6 @@ async function init() {
         // Transform to World
         const worldStartPos = localStartPos.applyMatrix4(startRunway.matrixWorld);
 
-        plane = await loadF16();
         plane.position.copy(worldStartPos);
         plane.rotation.y = startRunway.rotation.y; // Align orientation
 
@@ -170,7 +181,6 @@ async function init() {
     } else {
         console.error("No start runway found!");
         // Fallback
-        plane = await loadF16();
         plane.position.set(0, 10, 0);
         scene.add(plane);
         createJetFlame();
@@ -982,33 +992,23 @@ function fireLasers() {
 
     console.log("Attempting to fire...");
 
-    // Find Cannons by name
-    const leftC = plane.getObjectByName("CannonLeft");
-    const rightC = plane.getObjectByName("CannonRight");
-
-    console.log("Cannons Found:", !!leftC, !!rightC);
-
+    // Get cannon positions from jet config
+    const cannonPos = getCannonPositions(plane);
+    
     const shoot = (originObj, offset) => {
-        if (!originObj) {
-            console.log("No Origin Object");
-            return;
-        }
-
         const pos = new THREE.Vector3();
 
-        // Use Bounding Box center because OBJ origin is likely 0,0,0 with baked vertices
-        const box = new THREE.Box3().setFromObject(originObj);
-        box.getCenter(pos);
-
-        // If fallback to plane, add offset
-        if (offset) {
-            // For fallback, we need to manually offset from the center we just found (which is plane center)
-            // Reset pos to plane position first? 
-            // setFromObject(plane) gives plane bounds.
-            // Actually, if offset is provided, ignore the box center of the "originObj" (which is plane) 
-            // and use plane position + offset.
-            originObj.getWorldPosition(pos);
-            pos.add(offset.applyQuaternion(plane.quaternion));
+        if (originObj && !offset) {
+            // Use named object position
+            const box = new THREE.Box3().setFromObject(originObj);
+            box.getCenter(pos);
+        } else {
+            // Use offset from plane center
+            plane.getWorldPosition(pos);
+            if (offset) {
+                const worldOffset = offset.clone().applyQuaternion(plane.quaternion);
+                pos.add(worldOffset);
+            }
         }
 
         console.log("Spawning laser at:", pos.x.toFixed(2), pos.y.toFixed(2), pos.z.toFixed(2));
@@ -1020,7 +1020,6 @@ function fireLasers() {
         const laser = new THREE.Mesh(geo, mat);
 
         laser.position.copy(pos);
-        console.log("Shoot Pos:", laser.position);
         laser.quaternion.copy(plane.quaternion); // Align with plane
 
         scene.add(laser);
@@ -1033,13 +1032,21 @@ function fireLasers() {
         bullets.push({ mesh: laser, velocity: dir, dist: 0 });
     };
 
-    if (!leftC || !rightC) {
-        console.warn("Cannons not found! Using fallback slots.");
-        shoot(plane, new THREE.Vector3(-3.5, 0, 0));
-        shoot(plane, new THREE.Vector3(3.5, 0, 0));
+    // Fire from appropriate cannon positions based on jet config
+    if (cannonPos.useOffsets) {
+        console.log("Firing from offset positions (A-10 wing pylons)");
+        shoot(null, cannonPos.offsetLeft);
+        shoot(null, cannonPos.offsetRight);
+    } else if (cannonPos.useFallback) {
+        console.warn("Using fallback cannon positions");
+        shoot(null, cannonPos.fallbackLeft);
+        shoot(null, cannonPos.fallbackRight);
+    } else if (cannonPos.left && cannonPos.right) {
+        console.log("Firing from named objects");
+        shoot(cannonPos.left);
+        shoot(cannonPos.right);
     } else {
-        shoot(leftC);
-        shoot(rightC);
+        console.error("No valid cannon positions found!");
     }
 }
 

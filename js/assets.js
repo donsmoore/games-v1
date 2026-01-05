@@ -191,6 +191,28 @@ export function loadF16() {
 }
 
 /**
+ * Load A-10 Thunderbolt II (Warthog)
+ */
+export function loadA10() {
+    return loadOBJWithMaterials(
+        'assets/a10.obj',
+        (child) => {
+            // A-10 already has MTL materials, just use fallback if needed
+            if (!child.material || child.material.color.getHex() === 0xffffff) {
+                child.material = new THREE.MeshLambertMaterial({
+                    color: 0x505250, // Military grey
+                    side: THREE.DoubleSide
+                });
+            }
+        },
+        {
+            doubleSided: true,
+            materialType: 'lambert'
+        }
+    );
+}
+
+/**
  * Load Pine Tree
  */
 export function loadTree() {
