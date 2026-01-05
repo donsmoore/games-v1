@@ -260,79 +260,7 @@ class Chunk {
         this.mesh.receiveShadow = true;
         scene.add(this.mesh);
 
-        // 2. Scatter Trees
-        if (treeModel) {
-            // 20 trees per chunk? (1000x1000 is large, original was 2000x2000 with 50 trees)
-            // Original: 2000x2000 = 4M units^2. 50 trees.
-            // Chunk: 1000x1000 = 1M units^2.
-            // Should have ~12 trees to match density. Let's do 20 for "forest".
-            const runwaysForCheck = this.manager ? this.manager.globalRunways : [];
-            const minRunwayDistance = 50; // 50m exclusion from all runways
-            
-            for (let i = 0; i < 20; i++) {
-                const tLocalX = (Math.random() - 0.5) * size;
-                const tLocalZ = (Math.random() - 0.5) * size;
-
-                const tx = (cx * size) + tLocalX;
-                const tz = (cz * size) + tLocalZ;
-
-                // Check distance from ALL runways
-                let tooCloseToRunway = false;
-                for (const runway of runwaysForCheck) {
-                    const dx = tx - runway.position.x;
-                    const dz = tz - runway.position.z;
-                    const dist = Math.sqrt(dx * dx + dz * dz);
-                    
-                    if (dist < minRunwayDistance) {
-                        tooCloseToRunway = true;
-                        break;
-                    }
-                }
-                
-                if (tooCloseToRunway) continue;
-
-                const ty = getHeight(tx, tz);
-                if (ty > -1) {
-                    // Random Tree Type - equal distribution
-                    let tree;
-                    const treeTypes = [];
-                    
-                    // Build available tree types array
-                    if (this.treeModel) treeTypes.push(this.treeModel);
-                    if (this.roundTreeModel) treeTypes.push(this.roundTreeModel);
-                    if (this.palmTreeModel) treeTypes.push(this.palmTreeModel);
-                    if (this.mushroomTreeModel) treeTypes.push(this.mushroomTreeModel);
-                    if (this.lowpolyTreeModel) treeTypes.push(this.lowpolyTreeModel);
-                    
-                    // Pick random tree type
-                    if (treeTypes.length > 0) {
-                        const randomType = treeTypes[Math.floor(Math.random() * treeTypes.length)];
-                        tree = randomType.clone(true); // Deep clone to preserve materials
-                        
-                        // CRITICAL: Three.js clone() doesn't deep copy userData!
-                        // We MUST manually copy it
-                        tree.userData = Object.assign({}, randomType.userData || {});
-                    } else {
-                        continue; // No tree models available
-                    }
-
-                    tree.position.set(tx, ty, tz);
-
-                    // Scale: Random multiplier (0.5 to 1.0)
-                    // Use multiplyScalar to preserve the model's base scale
-                    const s = 0.5 + Math.random() * 0.5;
-                    tree.scale.multiplyScalar(s);
-                    
-                    // Store reference to chunk for unregistering
-                    tree.userData.chunk = this;
-
-                    scene.add(tree);
-                    this.trees.push(tree);
-                }
-            }
-        }
-
-        // 3. Mountain Range (One per chunk with 3-5 peaks)
+        // 2. Mountain Range (FIRST - before runway and trees)
         // Choose a position that is far from ALL runways (cross-chunk)
         const runwaysForCheck = this.manager ? this.manager.globalRunways : [];
         const maxMountainAttempts = 12;
@@ -487,53 +415,7 @@ class Chunk {
             this.manager.registerMountain(mountain);
         }
 
-        // Clear trees near mountain
-        for (let i = this.trees.length - 1; i >= 0; i--) {
-            const t = this.trees[i];
-            const dx = t.position.x - mX;
-            const dz = t.position.z - mZ;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < maxRadius + 40) { // Clear trees within mountain range radius
-                scene.remove(t);
-                this.trees.splice(i, 1);
-            }
-        }
-
-        // 4. Add pine trees around mountain range (10-15 trees)
-        // Place trees OUTSIDE the mountain base, on the surrounding ground
-        if (this.treeModel) {
-            const numTrees = 10 + Math.floor(Math.random() * 6); // 10-15
-
-            // Use stored baseRadius for consistency
-            const treeRadius = mountain.userData.baseRadius || maxRadius * 1.4;
-
-            // Place trees around the outer edge of the mountain
-            for (let i = 0; i < numTrees; i++) {
-                const treeAngle = Math.random() * Math.PI * 2;
-                // Place at 100-130% of the mountain's base radius (outside the collision zone)
-                const treeDist = treeRadius * (1.0 + Math.random() * 0.3);
-                const tX = mX + Math.cos(treeAngle) * treeDist;
-                const tZ = mZ + Math.sin(treeAngle) * treeDist;
-                const tY = getHeight(tX, tZ);
-
-                // Skip if underwater
-                if (tY < -1) continue;
-
-                // Pine trees only
-                const tree = this.treeModel.clone(true); // Deep clone to preserve materials
-
-                tree.position.set(tX, tY, tZ);
-
-                // Random scale (0.5-1.0)
-                const s = 0.5 + Math.random() * 0.5;
-                tree.scale.multiplyScalar(s);
-
-                scene.add(tree);
-                this.trees.push(tree);
-            }
-        }
-
-        // 5. Runway (One per chunk) - placed after mountain to keep separation
+        // 3. Runway (SECOND - after mountain, before trees)
         if (runwayTexture) {
             const rwGeo = new THREE.BoxGeometry(20, 30, 100);
 
@@ -632,28 +514,149 @@ class Chunk {
             if (this.manager) {
                 this.manager.registerRunway(runway);
             }
+        }
 
-            // Clear trees in runway area
+        // 4. Scatter Regular Trees (AFTER runway is placed)
+        const runwaysForCheckTrees = this.manager ? this.manager.globalRunways : [];
+        if (treeModel) {
+            const minRunwayDistance = 100; // Increased from 50m to 100m
+            
+            for (let i = 0; i < 20; i++) {
+                const tLocalX = (Math.random() - 0.5) * size;
+                const tLocalZ = (Math.random() - 0.5) * size;
+
+                const tx = (cx * size) + tLocalX;
+                const tz = (cz * size) + tLocalZ;
+
+                // Check distance from ALL runways
+                let tooCloseToRunway = false;
+                for (const runway of runwaysForCheckTrees) {
+                    const dx = tx - runway.position.x;
+                    const dz = tz - runway.position.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    
+                    if (dist < minRunwayDistance) {
+                        tooCloseToRunway = true;
+                        break;
+                    }
+                }
+                
+                if (tooCloseToRunway) continue;
+
+                const ty = getHeight(tx, tz);
+                if (ty > -1) {
+                    // Random Tree Type - equal distribution
+                    let tree;
+                    const treeTypes = [];
+                    
+                    // Build available tree types array
+                    if (this.treeModel) treeTypes.push(this.treeModel);
+                    if (this.roundTreeModel) treeTypes.push(this.roundTreeModel);
+                    if (this.palmTreeModel) treeTypes.push(this.palmTreeModel);
+                    if (this.mushroomTreeModel) treeTypes.push(this.mushroomTreeModel);
+                    if (this.lowpolyTreeModel) treeTypes.push(this.lowpolyTreeModel);
+                    
+                    // Pick random tree type
+                    if (treeTypes.length > 0) {
+                        const randomType = treeTypes[Math.floor(Math.random() * treeTypes.length)];
+                        tree = randomType.clone(true); // Deep clone to preserve materials
+                        
+                        // CRITICAL: Three.js clone() doesn't deep copy userData!
+                        // We MUST manually copy it
+                        tree.userData = Object.assign({}, randomType.userData || {});
+                    } else {
+                        continue; // No tree models available
+                    }
+
+                    tree.position.set(tx, ty, tz);
+
+                    // Scale: Random multiplier (0.5 to 1.0)
+                    // Use multiplyScalar to preserve the model's base scale
+                    const s = 0.5 + Math.random() * 0.5;
+                    tree.scale.multiplyScalar(s);
+                    
+                    // Store reference to chunk for unregistering
+                    tree.userData.chunk = this;
+
+                    scene.add(tree);
+                    this.trees.push(tree);
+                }
+            }
+        }
+
+        // 5. Add pine trees around mountain range (10-15 trees)
+        // Place trees OUTSIDE the mountain base, on the surrounding ground
+        if (this.treeModel && this.mountain) {
+            const numTrees = 10 + Math.floor(Math.random() * 6); // 10-15
+
+            // Use stored baseRadius for consistency
+            const treeRadius = this.mountain.userData.baseRadius || maxRadius * 1.4;
+
+            // Place trees around the outer edge of the mountain
+            for (let i = 0; i < numTrees; i++) {
+                const treeAngle = Math.random() * Math.PI * 2;
+                // Place at 100-130% of the mountain's base radius (outside the collision zone)
+                const treeDist = treeRadius * (1.0 + Math.random() * 0.3);
+                const tX = mX + Math.cos(treeAngle) * treeDist;
+                const tZ = mZ + Math.sin(treeAngle) * treeDist;
+                const tY = getHeight(tX, tZ);
+
+                // Skip if underwater
+                if (tY < -1) continue;
+
+                // Pine trees only
+                const tree = this.treeModel.clone(true); // Deep clone to preserve materials
+
+                tree.position.set(tX, tY, tZ);
+
+                // Random scale (0.5-1.0)
+                const s = 0.5 + Math.random() * 0.5;
+                tree.scale.multiplyScalar(s);
+
+                scene.add(tree);
+                this.trees.push(tree);
+            }
+        }
+
+        // Clear trees near runway (final cleanup)
+        if (this.runways.length > 0) {
             for (let i = this.trees.length - 1; i >= 0; i--) {
                 const t = this.trees[i];
-                const dx = t.position.x - rX;
-                const dz = t.position.z - rZ;
-                const dist = Math.sqrt(dx * dx + dz * dz);
+                for (const r of this.runways) {
+                    const dx = t.position.x - r.position.x;
+                    const dz = t.position.z - r.position.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
 
-                if (dist < 80) {
+                    if (dist < 100) { // 100m clearance
+                        scene.remove(t);
+                        this.trees.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Clear trees near mountain (final cleanup)
+        if (this.mountain) {
+            for (let i = this.trees.length - 1; i >= 0; i--) {
+                const t = this.trees[i];
+                const dx = t.position.x - mX;
+                const dz = t.position.z - mZ;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < maxRadius + 40) { // Clear trees within mountain range radius
                     scene.remove(t);
                     this.trees.splice(i, 1);
                 }
             }
         }
 
-        // 5b. Scatter Baobab Trees (Boss Trees) - 10 per chunk, AFTER runway registration
+        // 6. Scatter Baobab Trees (Boss Trees) - 10 per chunk, AFTER runway registration
         // This ensures they check against the runway in this chunk
         if (this.baobabTreeModel) {
             const baobabRadius = 25; // Baobab base radius for collision
             const minSpacing = 40; // Minimum distance from other objects
-            const runwaysForCheck = this.manager ? this.manager.globalRunways : [];
-            const minRunwayDistance = 50; // 50m exclusion from all runways
+            const runwaysForCheckBaobab = this.manager ? this.manager.globalRunways : [];
+            const minRunwayDistance = 100; // Increased from 50m to 100m
             
             for (let i = 0; i < 10; i++) {
                 let attempts = 0;
@@ -670,7 +673,7 @@ class Chunk {
 
                     // Check distance from ALL runways
                     let tooCloseToRunway = false;
-                    for (const runway of runwaysForCheck) {
+                    for (const runway of runwaysForCheckBaobab) {
                         const dx = tx - runway.position.x;
                         const dz = tz - runway.position.z;
                         const dist = Math.sqrt(dx * dx + dz * dz);
@@ -756,10 +759,11 @@ class Chunk {
             }
         }
 
-        // 6. Cities / Buildings (destructible) using prefab assets
+        // 7. Cities / Buildings (destructible) using prefab assets
         const numCities = 2; // ensure multiple chances per chunk
         const buildingsBefore = this.buildings.length;
         const prefabCount = this.buildingModels ? this.buildingModels.length : 0;
+        const runwaysForCheckBuildings = this.manager ? this.manager.globalRunways : [];
 
         const placeBuilding = (bx, bz, scale = 1) => {
             if (!prefabCount) return;
@@ -825,7 +829,7 @@ class Chunk {
 
                 // Avoid placing too close to ANY runway (cross-chunk check)
                 let skip = false;
-                for (const r of runwaysForCheck) { // Changed from this.runways to runwaysForCheck
+                for (const r of runwaysForCheckBuildings) {
                     const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
                     if (dist < 100) { skip = true; break; }
                 }
@@ -851,7 +855,7 @@ class Chunk {
                 
                 // Check runway distance
                 let tooClose = false;
-                for (const r of runwaysForCheck) {
+                for (const r of runwaysForCheckBuildings) {
                     const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
                     if (dist < 100) { tooClose = true; break; }
                 }
@@ -868,9 +872,9 @@ class Chunk {
             }
         }
 
-        // 7. Scatter AI Buildings in GROUPS/CLUSTERS - 1-2 clusters per chunk
+        // 8. Scatter AI Buildings in GROUPS/CLUSTERS - 1-2 clusters per chunk
         if (this.aiBuildings && this.aiBuildings.length > 0) {
-            const runwaysForCheck = this.manager ? this.manager.globalRunways : [];
+            const runwaysForCheckAI = this.manager ? this.manager.globalRunways : [];
             const minRunwayDistance = 100; // Keep away from runways
             const numClusters = 1 + Math.floor(Math.random() * 2); // 1 or 2 clusters per chunk
             
@@ -889,7 +893,7 @@ class Chunk {
                     
                     // Check distance from runways
                     let tooCloseToRunway = false;
-                    for (const runway of runwaysForCheck) {
+                    for (const runway of runwaysForCheckAI) {
                         const dx = clusterCenterX - runway.position.x;
                         const dz = clusterCenterZ - runway.position.z;
                         const dist = Math.sqrt(dx * dx + dz * dz);
