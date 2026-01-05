@@ -431,7 +431,8 @@ export async function loadAIBuilding(buildingNumber) {
     };
     group.userData.buildingType = 'ai';
     group.userData.buildingNumber = buildingNumber;
-    group.userData.health = 30; // AI buildings take more hits
+    group.userData.health = 5; // AI buildings require 5 hits
+    group.userData.maxHealth = 5; // Store max health for health bar
     
     return group;
 }

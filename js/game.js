@@ -43,6 +43,7 @@ const RETICLE_FORWARD = 200; // distance ahead of plane
 const RETICLE_UP = 2;       // lowered by 5 units
 const POINTS_PER_TREE = 1;
 const POINTS_PER_BUILDING = 3;
+const POINTS_PER_AI_BUILDING = 5;
 
 init();
 // Animation handled inside init via requestAnimationFrame on load
@@ -1193,6 +1194,15 @@ function updateBullets(delta) {
                     // AI Building with health - damage it
                     bld.userData.health -= 1;
                     console.log(`AI Building hit! Health remaining: ${bld.userData.health}`);
+                    
+                    // Create health bar if it doesn't exist
+                    if (!bld.userData.healthBarSprite) {
+                        createBuildingHealthBar(bld);
+                    }
+                    
+                    // Update health bar
+                    updateBuildingHealthBar(bld);
+                    
                     createExplosion(b.mesh.position.clone(), 0.4); // Small impact effect
                     hit = true;
                 } else {
@@ -1200,7 +1210,13 @@ function updateBullets(delta) {
                     createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
                     scene.remove(bld);
                     if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-                    points += POINTS_PER_BUILDING;
+                    
+                    // Award points based on building type
+                    if (bld.userData.buildingType === 'ai') {
+                        points += POINTS_PER_AI_BUILDING;
+                    } else {
+                        points += POINTS_PER_BUILDING;
+                    }
                     updateHUD();
                     hit = true;
                 }
@@ -1291,6 +1307,97 @@ function updateHealthBar(tree) {
     ctx.fillRect(4, 4, barWidth, canvas.height - 8);
     
     // Border
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+    
+    // HP Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${currentHP}/${maxHP}`, canvas.width / 2, canvas.height / 2);
+    
+    // Update texture
+    sprite.material.map.needsUpdate = true;
+}
+
+// Health Bar System for AI Buildings
+function createBuildingHealthBar(building) {
+    // Create canvas for health bar
+    const canvas = document.createElement('canvas');
+    canvas.width = 192;
+    canvas.height = 24;
+    const ctx = canvas.getContext('2d');
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    
+    // Create sprite material
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(15, 1.875, 1);
+    
+    // Position above building
+    const box = new THREE.Box3().setFromObject(building);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    sprite.position.set(0, size.y + 5, 0); // 5 units above building top
+    
+    // Add to building
+    building.add(sprite);
+    
+    // Store references
+    building.userData.healthBarSprite = sprite;
+    building.userData.healthBarCanvas = canvas;
+    building.userData.healthBarContext = ctx;
+    
+    // Initially hide (only show when damaged)
+    sprite.visible = false;
+    
+    return sprite;
+}
+
+function updateBuildingHealthBar(building) {
+    if (!building.userData.healthBarContext) return;
+    
+    const ctx = building.userData.healthBarContext;
+    const canvas = building.userData.healthBarCanvas;
+    const sprite = building.userData.healthBarSprite;
+    const maxHP = building.userData.maxHealth || 5;
+    const currentHP = building.userData.health || 5;
+    
+    // Show health bar only if damaged
+    if (currentHP < maxHP) {
+        sprite.visible = true;
+    } else {
+        sprite.visible = false;
+        return;
+    }
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Background (black with red tint)
+    ctx.fillStyle = '#220000';
+    ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
+    
+    // Health bar (green to yellow to red gradient based on HP)
+    const hpPercent = currentHP / maxHP;
+    let barColor;
+    if (hpPercent > 0.6) {
+        barColor = '#00ff00'; // Green
+    } else if (hpPercent > 0.3) {
+        barColor = '#ffff00'; // Yellow
+    } else {
+        barColor = '#ff0000'; // Red
+    }
+    
+    ctx.fillStyle = barColor;
+    const barWidth = (canvas.width - 8) * hpPercent;
+    ctx.fillRect(4, 4, barWidth, canvas.height - 8);
+    
+    // Border (white)
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
@@ -1538,17 +1645,32 @@ function updateBombs(delta) {
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
                 // Check if building has health (AI buildings)
-                if (bld.userData.health !== undefined && bld.userData.health > 10) {
-                    // AI Building with health - damage it (bombs do 10 damage)
-                    bld.userData.health -= 10;
+                if (bld.userData.health !== undefined && bld.userData.health > 1) {
+                    // AI Building with health - damage it (bombs do 1 damage)
+                    bld.userData.health -= 1;
                     console.log(`Bomb hit AI Building! Health remaining: ${bld.userData.health}`);
+                    
+                    // Create health bar if it doesn't exist
+                    if (!bld.userData.healthBarSprite) {
+                        createBuildingHealthBar(bld);
+                    }
+                    
+                    // Update health bar
+                    updateBuildingHealthBar(bld);
+                    
                     createExplosion(b.mesh.position.clone(), 0.75); // Bomb explosion
                 } else {
-                    // Regular building OR AI building at <=10 HP - destroy it
+                    // Regular building OR AI building at 1 HP - destroy it
                     createExplosion(box.getCenter(new THREE.Vector3()), 0.75); // 50% smaller (was 1.5)
                     scene.remove(bld);
                     if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-                    points += POINTS_PER_BUILDING;
+                    
+                    // Award points based on building type
+                    if (bld.userData.buildingType === 'ai') {
+                        points += POINTS_PER_AI_BUILDING;
+                    } else {
+                        points += POINTS_PER_BUILDING;
+                    }
                     updateHUD();
                 }
 
