@@ -1,0 +1,27 @@
+# A-10 Warthog Materials
+# Military grey paint scheme
+
+newmtl A10Body
+Ka 0.35 0.35 0.35
+Kd 0.50 0.52 0.50
+Ks 0.25 0.25 0.25
+Ns 40.0
+d 1.0
+illum 2
+
+newmtl A10Dark
+Ka 0.25 0.25 0.25
+Kd 0.35 0.37 0.35
+Ks 0.20 0.20 0.20
+Ns 35.0
+d 1.0
+illum 2
+
+newmtl A10Light
+Ka 0.45 0.45 0.45
+Kd 0.65 0.67 0.65
+Ks 0.30 0.30 0.30
+Ns 45.0
+d 1.0
+illum 2
+
