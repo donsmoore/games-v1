@@ -845,7 +845,7 @@ function createJetFlame() {
         // Left engine
         const leftFlame = new THREE.Mesh(createFlameGeometry(), flameMat.clone());
         leftFlame.rotation.x = -Math.PI / 2;
-        leftFlame.position.set(-1.44, 1.987, 3.5); // Left nacelle: raised 2m higher
+        leftFlame.position.set(-1.44, 0.487, 3.5); // Left nacelle: lowered 1.5m
         leftFlame.scale.set(0, 0, 0);
         plane.add(leftFlame);
         jetFlames.push(leftFlame);
@@ -853,7 +853,7 @@ function createJetFlame() {
         // Right engine
         const rightFlame = new THREE.Mesh(createFlameGeometry(), flameMat.clone());
         rightFlame.rotation.x = -Math.PI / 2;
-        rightFlame.position.set(1.44, 1.987, 3.5); // Right nacelle: raised 2m higher
+        rightFlame.position.set(1.44, 0.487, 3.5); // Right nacelle: lowered 1.5m
         rightFlame.scale.set(0, 0, 0);
         plane.add(rightFlame);
         jetFlames.push(rightFlame);
