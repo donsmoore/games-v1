@@ -39,8 +39,8 @@ export const JET_CONFIGS = {
             useNamedObjects: false,
             // Offset from plane center (underwing pylons)
             // X: left/right, Y: up/down, Z: forward/back
-            leftOffset: { x: -8.0, y: -0.5, z: 1.0 },  // Left outer pylon
-            rightOffset: { x: 8.0, y: -0.5, z: 1.0 }   // Right outer pylon
+            leftOffset: { x: -9.5, y: -2.2, z: 1.0 },  // Left outer pylon: 1.5m further out, 1.7m lower
+            rightOffset: { x: 9.5, y: -2.2, z: 1.0 }   // Right outer pylon: 1.5m further out, 1.7m lower
         },
         stats: {
             speed: 0.85,  // Slightly slower than F-16
