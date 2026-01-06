@@ -1191,6 +1191,12 @@ function updateBullets(delta) {
             if (box.containsPoint(b.mesh.position)) {
                 console.log(`Building hit! Type: ${bld.userData.buildingType}, Health: ${bld.userData.health}, MaxHealth: ${bld.userData.maxHealth}`);
                 
+                // Fix any buildings with incorrect health values (old spawned buildings)
+                if (bld.userData.buildingType === 'ai' && bld.userData.health > bld.userData.maxHealth) {
+                    console.log(`Fixing corrupted health: ${bld.userData.health} -> ${bld.userData.maxHealth}`);
+                    bld.userData.health = bld.userData.maxHealth;
+                }
+                
                 // Check if building has health (AI buildings)
                 if (bld.userData.health !== undefined && bld.userData.health > 1) {
                     // AI Building with health - damage it
@@ -1658,6 +1664,12 @@ function updateBombs(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
+                // Fix any buildings with incorrect health values (old spawned buildings)
+                if (bld.userData.buildingType === 'ai' && bld.userData.health > bld.userData.maxHealth) {
+                    console.log(`Bomb: Fixing corrupted health: ${bld.userData.health} -> ${bld.userData.maxHealth}`);
+                    bld.userData.health = bld.userData.maxHealth;
+                }
+                
                 // Check if building has health (AI buildings)
                 if (bld.userData.health !== undefined && bld.userData.health > 1) {
                     // AI Building with health - damage it (bombs do 1 damage)
