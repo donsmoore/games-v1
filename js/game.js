@@ -1189,14 +1189,17 @@ function updateBullets(delta) {
             const bld = buildings[j];
             const box = new THREE.Box3().setFromObject(bld);
             if (box.containsPoint(b.mesh.position)) {
+                console.log(`Building hit! Type: ${bld.userData.buildingType}, Health: ${bld.userData.health}, MaxHealth: ${bld.userData.maxHealth}`);
+                
                 // Check if building has health (AI buildings)
                 if (bld.userData.health !== undefined && bld.userData.health > 1) {
                     // AI Building with health - damage it
                     bld.userData.health -= 1;
-                    console.log(`AI Building hit! Health remaining: ${bld.userData.health}`);
+                    console.log(`AI Building damaged! Health remaining: ${bld.userData.health}/${bld.userData.maxHealth}`);
                     
                     // Create health bar if it doesn't exist
                     if (!bld.userData.healthBarSprite) {
+                        console.log('Creating health bar for building...');
                         createBuildingHealthBar(bld);
                     }
                     
@@ -1207,6 +1210,7 @@ function updateBullets(delta) {
                     hit = true;
                 } else {
                     // Regular building OR AI building at 1 HP - destroy it
+                    console.log(`Destroying building! Type: ${bld.userData.buildingType}`);
                     createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
                     scene.remove(bld);
                     if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
@@ -1324,6 +1328,8 @@ function updateHealthBar(tree) {
 
 // Health Bar System for AI Buildings
 function createBuildingHealthBar(building) {
+    console.log('createBuildingHealthBar called');
+    
     // Create canvas for health bar
     const canvas = document.createElement('canvas');
     canvas.width = 192;
@@ -1342,7 +1348,10 @@ function createBuildingHealthBar(building) {
     const box = new THREE.Box3().setFromObject(building);
     const size = new THREE.Vector3();
     box.getSize(size);
-    sprite.position.set(0, size.y + 5, 0); // 5 units above building top
+    const heightAboveBuilding = size.y + 5;
+    sprite.position.set(0, heightAboveBuilding, 0); // 5 units above building top
+    
+    console.log(`Health bar positioned at y=${heightAboveBuilding}, building size: ${size.x.toFixed(1)}x${size.y.toFixed(1)}x${size.z.toFixed(1)}`);
     
     // Add to building
     building.add(sprite);
@@ -1355,11 +1364,18 @@ function createBuildingHealthBar(building) {
     // Initially hide (only show when damaged)
     sprite.visible = false;
     
+    console.log('Health bar created successfully');
+    
     return sprite;
 }
 
 function updateBuildingHealthBar(building) {
-    if (!building.userData.healthBarContext) return;
+    console.log('updateBuildingHealthBar called');
+    
+    if (!building.userData.healthBarContext) {
+        console.log('No health bar context found!');
+        return;
+    }
     
     const ctx = building.userData.healthBarContext;
     const canvas = building.userData.healthBarCanvas;
@@ -1367,11 +1383,15 @@ function updateBuildingHealthBar(building) {
     const maxHP = building.userData.maxHealth || 5;
     const currentHP = building.userData.health || 5;
     
+    console.log(`Updating health bar: ${currentHP}/${maxHP} HP`);
+    
     // Show health bar only if damaged
     if (currentHP < maxHP) {
         sprite.visible = true;
+        console.log('Health bar set to visible');
     } else {
         sprite.visible = false;
+        console.log('Health bar hidden (full health)');
         return;
     }
     
