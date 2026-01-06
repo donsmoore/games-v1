@@ -167,7 +167,7 @@ async function init() {
         // Let's spawn at local Z = 40 (near one end), facing -Z (down the runway).
 
         // Plane Local position relative to Runway
-        const localStartPos = new THREE.Vector3(0, 15 + 1.0, 40);
+        const localStartPos = new THREE.Vector3(0, 15 + 2.0, 40); // +2.0 for A-10 clearance
 
         // Transform to World
         const worldStartPos = localStartPos.applyMatrix4(startRunway.matrixWorld);
@@ -182,7 +182,7 @@ async function init() {
     } else {
         console.error("No start runway found!");
         // Fallback
-        plane.position.set(0, 10, 0);
+        plane.position.set(0, 11, 0); // Raised 1m for A-10 clearance
         scene.add(plane);
         createJetFlame();
     }
@@ -931,7 +931,7 @@ function triggerCrash() {
         }
 
         if (startRunway) {
-            const localStartPos = new THREE.Vector3(0, 15 + 1.0, 40);
+            const localStartPos = new THREE.Vector3(0, 15 + 2.0, 40); // +2.0 for A-10 clearance
             const worldStartPos = localStartPos.applyMatrix4(startRunway.matrixWorld);
             plane.position.copy(worldStartPos);
             plane.rotation.set(0, startRunway.rotation.y, 0);
