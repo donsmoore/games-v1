@@ -437,6 +437,9 @@ function animate() {
                 // 3. Buildings - precise Box3
                 const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
                 for (const bld of buildings) {
+                    // Ensure building matrix is up to date
+                    bld.updateMatrixWorld(true);
+                    
                     const box = new THREE.Box3().setFromObject(bld);
                     if (box.containsPoint(plane.position)) {
                         triggerCrash();
@@ -1187,7 +1190,14 @@ function updateBullets(delta) {
         const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
         for (let j = buildings.length - 1; j >= 0 && !hit; j--) {
             const bld = buildings[j];
+            
+            // Ensure building matrix is up to date
+            bld.updateMatrixWorld(true);
+            
+            // Calculate bounding box with slight expansion for more reliable hits
             const box = new THREE.Box3().setFromObject(bld);
+            box.expandByScalar(0.5); // Add 0.5 unit padding for better hit detection
+            
             if (box.containsPoint(b.mesh.position)) {
                 console.log(`Building hit! Type: ${bld.userData.buildingType}, Health: ${bld.userData.health}, MaxHealth: ${bld.userData.maxHealth}`);
                 
@@ -1662,7 +1672,14 @@ function updateBombs(delta) {
         const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
         for (let j = buildings.length - 1; j >= 0; j--) {
             const bld = buildings[j];
+            
+            // Ensure building matrix is up to date
+            bld.updateMatrixWorld(true);
+            
+            // Calculate bounding box with slight expansion
             const box = new THREE.Box3().setFromObject(bld);
+            box.expandByScalar(0.5); // Add 0.5 unit padding for better hit detection
+            
             if (box.containsPoint(b.mesh.position)) {
                 // Fix any buildings with incorrect health values (old spawned buildings)
                 if (bld.userData.buildingType === 'ai' && bld.userData.health > bld.userData.maxHealth) {
