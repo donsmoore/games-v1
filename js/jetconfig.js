@@ -35,12 +35,12 @@ export const JET_CONFIGS = {
         name: 'A-10 Thunderbolt II (Warthog)',
         assetLoader: 'loadA10',
         cannonPositions: {
-            // A-10 fires from outermost underwing pylons
+            // A-10 fires from drop tanks on inboard wing pylons
             useNamedObjects: false,
-            // Offset from plane center (underwing pylons)
+            // Offset from plane center (drop tanks on inboard wings)
             // X: left/right, Y: up/down, Z: forward/back
-            leftOffset: { x: -9.0, y: -4.7, z: 1.0 },  // Left pylon: 3m more inward
-            rightOffset: { x: 9.0, y: -4.7, z: 1.0 }   // Right pylon: 3m more inward
+            leftOffset: { x: -3.5, y: -2.5, z: 0.5 },  // Left drop tank (inboard wing)
+            rightOffset: { x: 3.5, y: -2.5, z: 0.5 }   // Right drop tank (inboard wing)
         },
         stats: {
             speed: 0.85,  // Slightly slower than F-16
