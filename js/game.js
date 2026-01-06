@@ -1361,10 +1361,10 @@ function createBuildingHealthBar(building) {
     building.userData.healthBarCanvas = canvas;
     building.userData.healthBarContext = ctx;
     
-    // Initially hide (only show when damaged)
-    sprite.visible = false;
+    // Show immediately (building has been hit)
+    sprite.visible = true;
     
-    console.log('Health bar created successfully');
+    console.log('Health bar created successfully and visible');
     
     return sprite;
 }
@@ -1385,15 +1385,9 @@ function updateBuildingHealthBar(building) {
     
     console.log(`Updating health bar: ${currentHP}/${maxHP} HP`);
     
-    // Show health bar only if damaged
-    if (currentHP < maxHP) {
-        sprite.visible = true;
-        console.log('Health bar set to visible');
-    } else {
-        sprite.visible = false;
-        console.log('Health bar hidden (full health)');
-        return;
-    }
+    // Always show health bar for AI buildings once created (they've been hit)
+    sprite.visible = true;
+    console.log('Health bar set to visible');
     
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);

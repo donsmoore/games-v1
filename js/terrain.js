@@ -979,8 +979,8 @@ class Chunk {
                         // Copy building properties from the original model
                         building.userData.buildingType = randomAIModel.userData.buildingType || 'ai';
                         building.userData.buildingNumber = randomAIModel.userData.buildingNumber;
-                        building.userData.health = randomAIModel.userData.health || 5;
-                        building.userData.maxHealth = randomAIModel.userData.maxHealth || 5;
+                        building.userData.health = 5; // Force to 5 HP
+                        building.userData.maxHealth = 5; // Force to 5 max HP
                         building.userData.chunk = this;
                         
                         building.castShadow = true;
