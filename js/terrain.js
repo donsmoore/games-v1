@@ -962,6 +962,9 @@ class Chunk {
                         const building = randomAIModel.clone(true); // Deep clone to preserve materials
                         building.position.set(bx, by, bz);
                         
+                        // Update matrix for proper bounding box calculation
+                        building.updateMatrixWorld(true);
+                        
                         // Copy pre-calculated bounding box from the original model
                         if (randomAIModel.userData.baseHalfExtents) {
                             building.userData.halfExtents = { ...randomAIModel.userData.baseHalfExtents };
@@ -973,9 +976,12 @@ class Chunk {
                             building.userData.halfExtents = { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 };
                         }
                         
-                        building.userData.buildingType = 'ai';
+                        // Copy building properties from the original model
+                        building.userData.buildingType = randomAIModel.userData.buildingType || 'ai';
+                        building.userData.buildingNumber = randomAIModel.userData.buildingNumber;
+                        building.userData.health = randomAIModel.userData.health || 5;
+                        building.userData.maxHealth = randomAIModel.userData.maxHealth || 5;
                         building.userData.chunk = this;
-                        building.userData.health = 30; // AI buildings require multiple hits
                         
                         building.castShadow = true;
                         building.receiveShadow = true;
