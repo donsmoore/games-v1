@@ -25,11 +25,3 @@ Ns 45.0
 d 1.0
 illum 2
 
-newmtl A10Cockpit
-Ka 0.30 0.50 0.70
-Kd 0.53 0.80 1.00
-Ks 0.80 0.80 0.80
-Ns 100.0
-d 0.7
-illum 2
-
