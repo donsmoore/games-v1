@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { TerrainManager, getHeight } from './terrain.js?v=33';
-import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding, loadTank } from './assets.js?v=224';
+import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding } from './assets.js?v=223';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 import { ACTIVE_JET, getActiveJetConfig, getCannonPositions } from './jetconfig.js?v=1';
 import { SoundManager } from './audio.js?v=2';
-import { TankManager } from './tanks.js?v=1';
 
 // Global variables
 let camera, scene, renderer;
@@ -46,10 +45,6 @@ const RETICLE_UP = 2;       // lowered by 5 units
 const POINTS_PER_TREE = 1;
 const POINTS_PER_BUILDING = 3;
 const POINTS_PER_AI_BUILDING = 5;
-const POINTS_PER_TANK = 10;
-
-// Tank Manager
-let tankManager;
 
 init();
 // Animation handled inside init via requestAnimationFrame on load
@@ -101,7 +96,6 @@ async function init() {
     const building2 = await loadBuilding(2);
     const building3 = await loadBuilding(3);
     const building5 = await loadBuilding(5);
-    const tankModel = await loadTank();
 
     // Load AI buildings
     const aiBuildings = [];
@@ -110,7 +104,7 @@ async function init() {
     }
 
     console.log(`✓ All assets loaded successfully!`);
-    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}, Tanks: ${tankModel ? '✓' : '✗'}`);
+    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}`);
 
     // Hide loading overlay
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -219,9 +213,6 @@ async function init() {
     setupMinimap();
     setupReticle();
     setupBombTracker();
-
-    // Initialize Tank Manager (with terrainManager for collision detection and OBJ model)
-    tankManager = new TankManager(scene, terrainManager, tankModel);
 
     // Start loop
     animate();
@@ -524,17 +515,6 @@ function animate() {
     updateBombs(delta);
     updateHUD(getBombChargePct());
 
-    // Update Tanks
-    if (tankManager && plane) {
-        tankManager.update(delta, plane.position);
-
-        // Check if tank projectiles hit the player
-        if (!isCrashed && tankManager.checkPlayerHit(plane.position)) {
-            console.log("Hit by tank round!");
-            triggerCrash();
-        }
-    }
-
     // Update Audio
     if (SoundManager.initialized) {
         SoundManager.update(planeSpeed, 2.0); // 2.0 is MAX_SPEED from controls.js
@@ -783,25 +763,6 @@ function drawMinimap() {
         const bz = (b.position.z - pz) * scale;
         const half = 3; // fixed small size on minimap
         minimapCtx.fillRect(bx - half, bz - half, half * 2, half * 2);
-    }
-
-    // Draw Tanks (Red diamonds)
-    if (tankManager) {
-        const tanks = tankManager.getTanks();
-        minimapCtx.fillStyle = '#FF3333';
-        for (const tank of tanks) {
-            const tx = (tank.position.x - px) * scale;
-            const tz = (tank.position.z - pz) * scale;
-
-            // Draw diamond shape
-            minimapCtx.beginPath();
-            minimapCtx.moveTo(tx, tz - 4);
-            minimapCtx.lineTo(tx + 3, tz);
-            minimapCtx.lineTo(tx, tz + 4);
-            minimapCtx.lineTo(tx - 3, tz);
-            minimapCtx.closePath();
-            minimapCtx.fill();
-        }
     }
 
     // Draw Plane (Red Triangle)
@@ -1320,38 +1281,6 @@ function updateBullets(delta) {
             }
         }
 
-        // Tank collisions
-        if (!hit && tankManager) {
-            const tanks = tankManager.getTanks();
-            for (let j = tanks.length - 1; j >= 0; j--) {
-                const tank = tanks[j];
-
-                // Simple box collision
-                const tankBox = new THREE.Box3().setFromObject(tank);
-                tankBox.expandByScalar(0.5);
-
-                if (tankBox.containsPoint(b.mesh.position)) {
-                    console.log("Tank hit by laser!");
-
-                    tank.userData.health -= 1;
-
-                    if (tank.userData.health <= 0) {
-                        // Destroy tank
-                        createExplosion(tank.position.clone(), 1.5);
-                        tankManager.removeTank(j);
-                        points += POINTS_PER_TANK;
-                        updateHUD();
-                    } else {
-                        // Small hit effect
-                        createExplosion(b.mesh.position.clone(), 0.3);
-                    }
-
-                    hit = true;
-                    break;
-                }
-            }
-        }
-
         // Cleanup (Hit or Distance)
         if (hit || b.dist > 1000) {
             scene.remove(b.mesh);
@@ -1842,31 +1771,6 @@ function updateBombs(delta) {
                 });
                 bombs.splice(i, 1);
                 break;
-            }
-        }
-
-        // Tank collisions (bombs instantly kill tanks)
-        if (tankManager) {
-            const tanks = tankManager.getTanks();
-            for (let j = tanks.length - 1; j >= 0; j--) {
-                const tank = tanks[j];
-
-                // Check distance (bomb explosion radius ~5m)
-                const dx = b.mesh.position.x - tank.position.x;
-                const dz = b.mesh.position.z - tank.position.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-
-                // Also check height difference
-                const dy = Math.abs(b.mesh.position.y - tank.position.y);
-
-                if (dist < 15 && dy < 10) { // Within blast radius
-                    console.log("Tank destroyed by bomb!");
-
-                    createExplosion(tank.position.clone(), 2.0);
-                    tankManager.removeTank(j);
-                    points += POINTS_PER_TANK;
-                    updateHUD();
-                }
             }
         }
     }

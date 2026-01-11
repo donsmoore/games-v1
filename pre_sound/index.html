@@ -18,10 +18,7 @@
 </head>
 
 <body>
-    <div id="button-container">
-        <button id="sound-btn" class="hud-button">Sound: ON</button>
-        <button id="assets-btn" class="hud-button">Assets</button>
-    </div>
+    <button id="assets-btn" class="hud-button">Assets</button>
     <div id="stats-container">
         <div class="hud-box" id="stats-box">
             <div class="stat-row">
@@ -109,7 +106,6 @@
         const btn = document.getElementById('assets-btn');
         if (btn) {
             btn.addEventListener('click', () => {
-                btn.blur(); // Release focus
                 window.open('assets_viewer.html', '_blank', 'noopener');
             });
         }

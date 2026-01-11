@@ -6,24 +6,18 @@ body {
     font-family: 'Courier New', Courier, monospace;
 }
 
-#button-container {
+.hud-button {
     position: absolute;
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
-    display: flex;
-    gap: 10px;
-    z-index: 10;
-}
-
-.hud-button {
     padding: 8px 14px;
     background: rgba(40, 40, 40, 0.85);
     color: #fff;
     border: 1px solid #555;
     border-radius: 4px;
     cursor: pointer;
-    white-space: nowrap;
+    z-index: 10;
 }
 
 .hud-button:hover {

@@ -23,19 +23,19 @@ async function loadOBJWithMaterials(objPath, fallbackMaterialFn, options = {}) {
     const basePath = objPath.substring(0, objPath.lastIndexOf('/') + 1);
     const filename = objPath.split('/').pop(); // Just the filename
     const mtlFilename = filename.replace('.obj', '.mtl');
-
+    
     return new Promise((resolve, reject) => {
         // Try to load MTL file first
         mtlLoader.setPath(basePath);
         mtlLoader.load(
             mtlFilename + '?v=' + Date.now(),
-
+            
             // MTL loaded successfully
             (materials) => {
                 console.log(`✓ MTL loaded: ${basePath}${mtlFilename}`);
                 materials.preload();
                 objLoader.setMaterials(materials);
-
+                
                 // Small delay to ensure materials are fully preloaded
                 setTimeout(() => {
                     // Load OBJ with materials
@@ -50,15 +50,15 @@ async function loadOBJWithMaterials(objPath, fallbackMaterialFn, options = {}) {
                     );
                 }, 10); // 10ms delay to let materials fully preload
             },
-
+            
             // MTL loading in progress
             undefined,
-
+            
             // MTL not found or error - load OBJ without materials
             () => {
                 console.log(`ℹ No MTL file found for ${objPath}, checking vertex colors...`);
                 objLoader.setMaterials(null); // Clear any previous materials
-
+                
                 objLoader.load(
                     objPath + '?v=' + Date.now(),
                     (group) => {
@@ -82,37 +82,37 @@ function processLoadedGroup(group, fallbackMaterialFn, options) {
             // Enable shadows
             child.castShadow = options.castShadow !== false;
             child.receiveShadow = options.receiveShadow !== false;
-
+            
             // Check if material was loaded from MTL
-            const hasMTLMaterial = child.material &&
-                child.material.name &&
-                child.material.name !== '';
-
+            const hasMTLMaterial = child.material && 
+                                   child.material.name && 
+                                   child.material.name !== '';
+            
             // Check if geometry has vertex colors
             const hasVertexColors = child.geometry.attributes.color !== undefined;
-
+            
             if (hasMTLMaterial) {
                 // Material from MTL file - keep it but ensure proper settings
                 console.log(`✓ Using MTL material for ${child.name}: ${child.material.name}`);
-
+                
                 // Enhance MTL material with shadows and proper sides
                 if (child.material.map) {
                     console.log(`  ✓ Texture map found: ${child.material.map.image?.src || 'loading...'}`);
                 }
-
+                
                 // Ensure double-sided if needed
                 if (options.doubleSided) {
                     child.material.side = THREE.DoubleSide;
                 }
-
+                
             } else if (hasVertexColors) {
                 // Use vertex colors from OBJ file
                 console.log(`✓ Using vertex colors for ${child.name}`);
-
+                
                 // Create material that uses vertex colors
                 const materialType = options.materialType || 'phong';
                 let material;
-
+                
                 if (materialType === 'standard') {
                     material = new THREE.MeshStandardMaterial({
                         vertexColors: true,
@@ -132,15 +132,15 @@ function processLoadedGroup(group, fallbackMaterialFn, options) {
                         side: options.doubleSided ? THREE.DoubleSide : THREE.FrontSide
                     });
                 }
-
+                
                 child.material = material;
-
+                
             } else if (fallbackMaterialFn) {
                 // No MTL, no vertex colors - use fallback function
                 console.log(`ℹ Using fallback material for ${child.name}`);
                 fallbackMaterialFn(child);
             }
-
+            
             // Special handling for specific parts
             if (options.onMeshProcessed) {
                 options.onMeshProcessed(child);
@@ -278,9 +278,9 @@ export function loadPalmTree() {
                 child.material = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
             } else {
                 // Leaves
-                child.material = new THREE.MeshLambertMaterial({
+                child.material = new THREE.MeshLambertMaterial({ 
                     color: 0x228B22,
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide 
                 });
             }
         },
@@ -364,7 +364,7 @@ export function loadBaobabTree() {
 export async function loadBuilding(type = 2) {
     const map = { 2: 'building_2', 3: 'building_3', 5: 'building_5' };
     const key = map[type] || 'building_2';
-
+    
     const group = await loadOBJWithMaterials(
         `assets/${key}.obj`,
         (child) => {
@@ -387,7 +387,7 @@ export async function loadBuilding(type = 2) {
             materialType: 'standard'
         }
     );
-
+    
     // Compute base half extents for placement/collision
     const box = new THREE.Box3().setFromObject(group);
     const size = new THREE.Vector3();
@@ -397,7 +397,7 @@ export async function loadBuilding(type = 2) {
         y: size.y * 0.5,
         z: size.z * 0.5
     };
-
+    
     return group;
 }
 
@@ -406,7 +406,7 @@ export async function loadBuilding(type = 2) {
  */
 export async function loadAIBuilding(buildingNumber) {
     const buildingName = `AI-building-${String(buildingNumber).padStart(3, '0')}`;
-
+    
     const group = await loadOBJWithMaterials(
         `assets/${buildingName}.obj`,
         (child) => {
@@ -419,7 +419,7 @@ export async function loadAIBuilding(buildingNumber) {
             materialType: 'lambert'
         }
     );
-
+    
     // Compute base half extents for placement/collision
     const box = new THREE.Box3().setFromObject(group);
     const size = new THREE.Vector3();
@@ -433,7 +433,7 @@ export async function loadAIBuilding(buildingNumber) {
     group.userData.buildingNumber = buildingNumber;
     group.userData.health = 5; // AI buildings require 5 hits
     group.userData.maxHealth = 5; // Store max health for health bar
-
+    
     return group;
 }
 
@@ -455,14 +455,14 @@ export async function loadLowpolyTree() {
             materialType: 'lambert'
         }
     );
-
+    
     // Tree collision data (scaled 2x larger)
     // Note: Tree geometry extends from Y=-1.5 to Y=51.6, total ~53 units
     // Canopy extends to radius ~35 units (wide leaf coverage)
     group.userData.treeType = 'lowpoly';
     group.userData.baseRadius = 22.0;  // Covers most of canopy (compromise between trunk and full leaves)
     group.userData.baseHeight = 53.0;  // Full height from base to top
-
+    
     return group;
 }
 
@@ -472,36 +472,4 @@ export async function loadLowpolyTree() {
 export function loadRunwayTexture() {
     const loader = new THREE.TextureLoader();
     return loader.load('assets/runway.png');
-}
-
-/**
- * Load Tank model
- */
-export async function loadTank() {
-    const group = await loadOBJWithMaterials(
-        'assets/tank.obj',
-        (child) => {
-            // Fallback materials if MTL fails
-            if (child.name.includes('Chassis')) {
-                child.material = new THREE.MeshLambertMaterial({ color: 0x2e8b57 });
-            } else if (child.name.includes('Tread')) {
-                child.material = new THREE.MeshLambertMaterial({ color: 0x111111 });
-            } else if (child.name.includes('Turret')) {
-                child.material = new THREE.MeshLambertMaterial({ color: 0x3cb371 });
-            } else if (child.name.includes('Barrel')) {
-                child.material = new THREE.MeshLambertMaterial({ color: 0x2f4f4f });
-            } else {
-                child.material = new THREE.MeshLambertMaterial({ color: 0x2e8b57 });
-            }
-        },
-        {
-            materialType: 'lambert'
-        }
-    );
-
-    // Tank collision data
-    group.userData.isTank = true;
-    group.userData.collisionRadius = 40; // ~10 * 4 scale
-
-    return group;
 }

@@ -1,10 +1,8 @@
 import * as THREE from 'three';
 import { TerrainManager, getHeight } from './terrain.js?v=33';
-import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding, loadTank } from './assets.js?v=224';
+import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding } from './assets.js?v=223';
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 import { ACTIVE_JET, getActiveJetConfig, getCannonPositions } from './jetconfig.js?v=1';
-import { SoundManager } from './audio.js?v=2';
-import { TankManager } from './tanks.js?v=1';
 
 // Global variables
 let camera, scene, renderer;
@@ -46,10 +44,6 @@ const RETICLE_UP = 2;       // lowered by 5 units
 const POINTS_PER_TREE = 1;
 const POINTS_PER_BUILDING = 3;
 const POINTS_PER_AI_BUILDING = 5;
-const POINTS_PER_TANK = 10;
-
-// Tank Manager
-let tankManager;
 
 init();
 // Animation handled inside init via requestAnimationFrame on load
@@ -90,28 +84,27 @@ async function init() {
 
     // Load all assets SEQUENTIALLY to ensure materials load properly
     console.log('Loading all game assets...');
-
+    
     const treeModel = await loadTree();
     const roundTreeModel = await loadRoundTree();
     const palmTreeModel = await loadPalmTree();
     const mushroomTreeModel = await loadMushroomTree();
     const baobabTreeModel = await loadBaobabTree();
     const lowpolyTreeModel = await loadLowpolyTree();
-
+    
     const building2 = await loadBuilding(2);
     const building3 = await loadBuilding(3);
     const building5 = await loadBuilding(5);
-    const tankModel = await loadTank();
-
+    
     // Load AI buildings
     const aiBuildings = [];
     for (let i = 1; i <= 10; i++) {
         aiBuildings.push(await loadAIBuilding(i));
     }
-
+    
     console.log(`✓ All assets loaded successfully!`);
-    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}, Tanks: ${tankModel ? '✓' : '✗'}`);
-
+    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}`);
+    
     // Hide loading overlay
     const loadingOverlay = document.getElementById('loading-overlay');
     if (loadingOverlay) {
@@ -121,17 +114,17 @@ async function init() {
             loadingOverlay.style.display = 'none';
         }, 500);
     }
-
+    
     // Load Runway Texture (synchronous, doesn't need await)
     const runwayTex = loadRunwayTexture();
     runwayTex.wrapS = THREE.RepeatWrapping;
     runwayTex.wrapT = THREE.RepeatWrapping;
 
     terrainManager = new TerrainManager(
-        scene,
-        treeModel,
-        runwayTex,
-        roundTreeModel,
+        scene, 
+        treeModel, 
+        runwayTex, 
+        roundTreeModel, 
         [building2, building3, building5],
         palmTreeModel,
         mushroomTreeModel,
@@ -159,14 +152,14 @@ async function init() {
     // Load active jet based on configuration
     const jetConfig = getActiveJetConfig();
     console.log(`Loading active jet: ${jetConfig.name}`);
-
+    
     // Load the appropriate jet model
     if (ACTIVE_JET === 'A10') {
         plane = await loadA10();
     } else {
         plane = await loadF16();
     }
-
+    
     if (startRunway) {
         // Align plane with runway
         // Runway Local Y+ is Up. Surface is +15.
@@ -199,29 +192,9 @@ async function init() {
     // Event listeners
     window.addEventListener('resize', onWindowResize);
 
-    const soundBtn = document.getElementById('sound-btn');
-    if (soundBtn) {
-        soundBtn.addEventListener('click', (e) => {
-            if (!SoundManager.initialized) SoundManager.init();
-
-            const isMuted = SoundManager.toggleMute();
-            soundBtn.innerText = isMuted ? "Sound: OFF" : "Sound: ON";
-            soundBtn.style.opacity = isMuted ? "0.5" : "1.0";
-
-            // Remove focus so Spacebar doesn't trigger it again
-            soundBtn.blur();
-
-            // Prevent this click from triggering look mode or other things if necessary
-            e.stopPropagation();
-        });
-    }
-
     setupMinimap();
     setupReticle();
     setupBombTracker();
-
-    // Initialize Tank Manager (with terrainManager for collision detection and OBJ model)
-    tankManager = new TankManager(scene, terrainManager, tankModel);
 
     // Start loop
     animate();
@@ -238,17 +211,6 @@ async function init() {
         if (e.button === 1) {
             isLooking = false;
         }
-    });
-
-    // Audio Start Interaction
-    document.addEventListener('mousedown', () => {
-        if (!SoundManager.initialized) SoundManager.init();
-        SoundManager.resume();
-    });
-
-    document.addEventListener('keydown', () => {
-        if (!SoundManager.initialized) SoundManager.init();
-        SoundManager.resume();
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -421,7 +383,7 @@ function animate() {
 
                 // 2. Trees
                 const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
-
+                
                 // Check regular trees
                 for (const tree of activeTrees) {
                     // Cylinder Collision Check
@@ -432,12 +394,12 @@ function animate() {
                     // Use tree userData for accurate hitbox, or fallback to pine tree defaults
                     let baseRadius = 10;
                     let baseHeight = 45;
-
+                    
                     if (tree.userData && tree.userData.baseRadius) {
                         baseRadius = tree.userData.baseRadius;
                         baseHeight = tree.userData.baseHeight;
                     }
-
+                    
                     const hitRadius = baseRadius * tree.scale.x;
                     const hitHeight = baseHeight * tree.scale.y;
 
@@ -448,7 +410,7 @@ function animate() {
                         break;
                     }
                 }
-
+                
                 // Check Baobab trees
                 for (const tree of activeBaobabTrees) {
                     const dx = plane.position.x - tree.position.x;
@@ -477,7 +439,7 @@ function animate() {
                 for (const bld of buildings) {
                     // Ensure building matrix is up to date
                     bld.updateMatrixWorld(true);
-
+                    
                     const box = new THREE.Box3().setFromObject(bld);
                     if (box.containsPoint(plane.position)) {
                         triggerCrash();
@@ -524,31 +486,15 @@ function animate() {
     updateBombs(delta);
     updateHUD(getBombChargePct());
 
-    // Update Tanks
-    if (tankManager && plane) {
-        tankManager.update(delta, plane.position);
-
-        // Check if tank projectiles hit the player
-        if (!isCrashed && tankManager.checkPlayerHit(plane.position)) {
-            console.log("Hit by tank round!");
-            triggerCrash();
-        }
-    }
-
-    // Update Audio
-    if (SoundManager.initialized) {
-        SoundManager.update(planeSpeed, 2.0); // 2.0 is MAX_SPEED from controls.js
-    }
-
     renderer.render(scene, camera);
     drawMinimap();
-
+    
     // Render bomb tracker if active
     if (activeBomb && bombTrackerRenderer && bombTrackerCamera) {
         updateBombTrackerCamera();
         bombTrackerRenderer.render(scene, bombTrackerCamera);
     }
-
+    
     // Check if we should hide the bomb tracker
     if (bombTrackerHideTime && performance.now() >= bombTrackerHideTime) {
         hideBombTracker();
@@ -617,31 +563,31 @@ function setupReticle() {
 function setupBombTracker() {
     // Get the bomb tracker container from HTML
     bombTrackerContainer = document.getElementById('bomb-tracker');
-
+    
     if (!bombTrackerContainer) {
         console.warn('Bomb tracker container not found');
         return;
     }
-
+    
     // Create camera
     bombTrackerCamera = new THREE.PerspectiveCamera(60, 320 / 240, 0.1, 500);
-
+    
     // Create separate renderer
     bombTrackerRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     bombTrackerRenderer.setSize(320, 240);
     bombTrackerRenderer.shadowMap.enabled = true;
-
+    
     // Append to container
     bombTrackerContainer.appendChild(bombTrackerRenderer.domElement);
 }
 
 function updateBombTrackerCamera() {
     if (!bombTrackerCamera || !plane || !activeBomb) return;
-
+    
     // Camera positioned 10m behind the plane
     const offset = new THREE.Vector3(0, 0, 10); // 10 units behind
     const cameraPos = offset.applyQuaternion(plane.quaternion).add(plane.position);
-
+    
     bombTrackerCamera.position.copy(cameraPos);
     bombTrackerCamera.lookAt(activeBomb.position);
 }
@@ -763,7 +709,7 @@ function drawMinimap() {
         minimapCtx.arc(tx, tz, 2, 0, Math.PI * 2);
         minimapCtx.fill();
     }
-
+    
     // Draw Baobab Trees (Orange Larger Dots)
     minimapCtx.fillStyle = '#FF8800';
     for (const t of activeBaobabTrees) {
@@ -783,25 +729,6 @@ function drawMinimap() {
         const bz = (b.position.z - pz) * scale;
         const half = 3; // fixed small size on minimap
         minimapCtx.fillRect(bx - half, bz - half, half * 2, half * 2);
-    }
-
-    // Draw Tanks (Red diamonds)
-    if (tankManager) {
-        const tanks = tankManager.getTanks();
-        minimapCtx.fillStyle = '#FF3333';
-        for (const tank of tanks) {
-            const tx = (tank.position.x - px) * scale;
-            const tz = (tank.position.z - pz) * scale;
-
-            // Draw diamond shape
-            minimapCtx.beginPath();
-            minimapCtx.moveTo(tx, tz - 4);
-            minimapCtx.lineTo(tx + 3, tz);
-            minimapCtx.lineTo(tx, tz + 4);
-            minimapCtx.lineTo(tx - 3, tz);
-            minimapCtx.closePath();
-            minimapCtx.fill();
-        }
     }
 
     // Draw Plane (Red Triangle)
@@ -1067,9 +994,6 @@ function createExplosion(position, size = 1.0) {
         const startAge = Math.random() * 0.3;
         explosions.push({ mesh: sphere, age: startAge, size: size * (0.5 + Math.random() * 0.5) });
     }
-
-    // Play Sound
-    SoundManager.playExplosion(size);
 }
 
 function updateExplosions(delta) {
@@ -1097,11 +1021,10 @@ function fireLasers() {
     laserEnergy -= 2.5;
 
     console.log("Attempting to fire...");
-    SoundManager.playLaser();
 
     // Get cannon positions from jet config
     const cannonPos = getCannonPositions(plane);
-
+    
     const shoot = (originObj, offset) => {
         const pos = new THREE.Vector3();
 
@@ -1194,11 +1117,11 @@ function updateBullets(delta) {
             if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                 // Hit!
                 console.log("Laser hit tree!");
-
+                
                 const explosionPos = tree.position.clone();
                 explosionPos.y += 5;
                 createExplosion(explosionPos, 0.5); // Half size for trees
-
+                
                 // Remove Tree
                 scene.remove(tree);
                 terrainManager.unregisterTree(tree);
@@ -1210,7 +1133,7 @@ function updateBullets(delta) {
                 break;
             }
         }
-
+        
         // Baobab Tree Collisions (Boss Trees with HP)
         if (!hit) {
             for (let j = activeBaobabTrees.length - 1; j >= 0; j--) {
@@ -1235,16 +1158,16 @@ function updateBullets(delta) {
                 // Allow hits slightly below tree position
                 if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                     console.log("Laser hit Baobab tree!");
-
+                    
                     // Damage boss tree
                     const destroyed = damageTree(tree, 1); // 1 HP damage per laser hit
-
+                    
                     if (destroyed) {
                         // Boss tree destroyed - BIG explosion!
                         const explosionPos = tree.position.clone();
                         explosionPos.y += baseHeight / 2; // Middle of tree
                         createExplosion(explosionPos, 2.5); // 2.5x size explosion!
-
+                        
                         // Remove tree
                         scene.remove(tree);
                         terrainManager.unregisterBaobabTree(tree);
@@ -1267,38 +1190,38 @@ function updateBullets(delta) {
         const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
         for (let j = buildings.length - 1; j >= 0 && !hit; j--) {
             const bld = buildings[j];
-
+            
             // Ensure building matrix is up to date
             bld.updateMatrixWorld(true);
-
+            
             // Calculate bounding box with slight expansion for more reliable hits
             const box = new THREE.Box3().setFromObject(bld);
             box.expandByScalar(0.5); // Add 0.5 unit padding for better hit detection
-
+            
             if (box.containsPoint(b.mesh.position)) {
                 console.log(`Building hit! Type: ${bld.userData.buildingType}, Health: ${bld.userData.health}, MaxHealth: ${bld.userData.maxHealth}`);
-
+                
                 // Fix any buildings with incorrect health values (old spawned buildings)
                 if (bld.userData.buildingType === 'ai' && bld.userData.health > bld.userData.maxHealth) {
                     console.log(`Fixing corrupted health: ${bld.userData.health} -> ${bld.userData.maxHealth}`);
                     bld.userData.health = bld.userData.maxHealth;
                 }
-
+                
                 // Check if building has health (AI buildings)
                 if (bld.userData.health !== undefined && bld.userData.health > 1) {
                     // AI Building with health - damage it
                     bld.userData.health -= 1;
                     console.log(`AI Building damaged! Health remaining: ${bld.userData.health}/${bld.userData.maxHealth}`);
-
+                    
                     // Create health bar if it doesn't exist
                     if (!bld.userData.healthBarSprite) {
                         console.log('Creating health bar for building...');
                         createBuildingHealthBar(bld);
                     }
-
+                    
                     // Update health bar
                     updateBuildingHealthBar(bld);
-
+                    
                     createExplosion(b.mesh.position.clone(), 0.4); // Small impact effect
                     hit = true;
                 } else {
@@ -1307,7 +1230,7 @@ function updateBullets(delta) {
                     createExplosion(box.getCenter(new THREE.Vector3()), 0.6); // 50% smaller (was 1.2)
                     scene.remove(bld);
                     if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-
+                    
                     // Award points based on building type
                     if (bld.userData.buildingType === 'ai') {
                         points += POINTS_PER_AI_BUILDING;
@@ -1316,38 +1239,6 @@ function updateBullets(delta) {
                     }
                     updateHUD();
                     hit = true;
-                }
-            }
-        }
-
-        // Tank collisions
-        if (!hit && tankManager) {
-            const tanks = tankManager.getTanks();
-            for (let j = tanks.length - 1; j >= 0; j--) {
-                const tank = tanks[j];
-
-                // Simple box collision
-                const tankBox = new THREE.Box3().setFromObject(tank);
-                tankBox.expandByScalar(0.5);
-
-                if (tankBox.containsPoint(b.mesh.position)) {
-                    console.log("Tank hit by laser!");
-
-                    tank.userData.health -= 1;
-
-                    if (tank.userData.health <= 0) {
-                        // Destroy tank
-                        createExplosion(tank.position.clone(), 1.5);
-                        tankManager.removeTank(j);
-                        points += POINTS_PER_TANK;
-                        updateHUD();
-                    } else {
-                        // Small hit effect
-                        createExplosion(b.mesh.position.clone(), 0.3);
-                    }
-
-                    hit = true;
-                    break;
                 }
             }
         }
@@ -1369,42 +1260,42 @@ function createHealthBar(tree) {
     canvas.width = 192; // 50% larger (was 128, now 192)
     canvas.height = 24; // 50% larger (was 16, now 24)
     const ctx = canvas.getContext('2d');
-
+    
     // Create texture from canvas
     const texture = new THREE.CanvasTexture(canvas);
-
+    
     // Create sprite material
     const material = new THREE.SpriteMaterial({ map: texture });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(15, 1.875, 1); // 50% larger scale (was 10, 1.25, now 15, 1.875)
-
+    
     // Position above tree
     const treeHeight = tree.userData.baseHeight || 70;
     sprite.position.set(0, treeHeight + 5, 0); // 5 units above tree top
-
+    
     // Add to tree
     tree.add(sprite);
-
+    
     // Store references
     tree.userData.healthBarSprite = sprite;
     tree.userData.healthBarCanvas = canvas;
     tree.userData.healthBarContext = ctx;
-
+    
     // Initially hide (only show when damaged)
     sprite.visible = false;
-
+    
     return sprite;
 }
 
 function updateHealthBar(tree) {
     if (!tree.userData.healthBarContext) return;
-
+    
     const ctx = tree.userData.healthBarContext;
     const canvas = tree.userData.healthBarCanvas;
     const sprite = tree.userData.healthBarSprite;
     const maxHP = tree.userData.maxHP || 10;
     const currentHP = tree.userData.currentHP || 10;
-
+    
     // Show health bar only if damaged
     if (currentHP < maxHP) {
         sprite.visible = true;
@@ -1412,14 +1303,14 @@ function updateHealthBar(tree) {
         sprite.visible = false;
         return;
     }
-
+    
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+    
     // Background (black with red tint)
     ctx.fillStyle = '#220000';
     ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
-
+    
     // Health bar (green to yellow to red gradient based on HP)
     const hpPercent = currentHP / maxHP;
     let barColor;
@@ -1430,23 +1321,23 @@ function updateHealthBar(tree) {
     } else {
         barColor = '#ff0000'; // Red
     }
-
+    
     const barWidth = (canvas.width - 8) * hpPercent;
     ctx.fillStyle = barColor;
     ctx.fillRect(4, 4, barWidth, canvas.height - 8);
-
+    
     // Border
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-
+    
     // HP Text
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${currentHP}/${maxHP}`, canvas.width / 2, canvas.height / 2);
-
+    
     // Update texture
     sprite.material.map.needsUpdate = true;
 }
@@ -1454,73 +1345,73 @@ function updateHealthBar(tree) {
 // Health Bar System for AI Buildings
 function createBuildingHealthBar(building) {
     console.log('createBuildingHealthBar called');
-
+    
     // Create canvas for health bar
     const canvas = document.createElement('canvas');
     canvas.width = 192;
     canvas.height = 24;
     const ctx = canvas.getContext('2d');
-
+    
     // Create texture from canvas
     const texture = new THREE.CanvasTexture(canvas);
-
+    
     // Create sprite material
     const material = new THREE.SpriteMaterial({ map: texture });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(15, 1.875, 1);
-
+    
     // Position above building
     const box = new THREE.Box3().setFromObject(building);
     const size = new THREE.Vector3();
     box.getSize(size);
     const heightAboveBuilding = size.y + 5;
     sprite.position.set(0, heightAboveBuilding, 0); // 5 units above building top
-
+    
     console.log(`Health bar positioned at y=${heightAboveBuilding}, building size: ${size.x.toFixed(1)}x${size.y.toFixed(1)}x${size.z.toFixed(1)}`);
-
+    
     // Add to building
     building.add(sprite);
-
+    
     // Store references
     building.userData.healthBarSprite = sprite;
     building.userData.healthBarCanvas = canvas;
     building.userData.healthBarContext = ctx;
-
+    
     // Show immediately (building has been hit)
     sprite.visible = true;
-
+    
     console.log('Health bar created successfully and visible');
-
+    
     return sprite;
 }
 
 function updateBuildingHealthBar(building) {
     console.log('updateBuildingHealthBar called');
-
+    
     if (!building.userData.healthBarContext) {
         console.log('No health bar context found!');
         return;
     }
-
+    
     const ctx = building.userData.healthBarContext;
     const canvas = building.userData.healthBarCanvas;
     const sprite = building.userData.healthBarSprite;
     const maxHP = building.userData.maxHealth || 5;
     const currentHP = building.userData.health || 5;
-
+    
     console.log(`Updating health bar: ${currentHP}/${maxHP} HP`);
-
+    
     // Always show health bar for AI buildings once created (they've been hit)
     sprite.visible = true;
     console.log('Health bar set to visible');
-
+    
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+    
     // Background (black with red tint)
     ctx.fillStyle = '#220000';
     ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
-
+    
     // Health bar (green to yellow to red gradient based on HP)
     const hpPercent = currentHP / maxHP;
     let barColor;
@@ -1531,51 +1422,51 @@ function updateBuildingHealthBar(building) {
     } else {
         barColor = '#ff0000'; // Red
     }
-
+    
     ctx.fillStyle = barColor;
     const barWidth = (canvas.width - 8) * hpPercent;
     ctx.fillRect(4, 4, barWidth, canvas.height - 8);
-
+    
     // Border (white)
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-
+    
     // HP Text
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${currentHP}/${maxHP}`, canvas.width / 2, canvas.height / 2);
-
+    
     // Update texture
     sprite.material.map.needsUpdate = true;
 }
 
 function damageTree(tree, damage = 1) {
     if (!tree.userData.isBossTree) return false; // Not a boss tree
-
+    
     // Initialize HP if needed
     if (tree.userData.currentHP === undefined) {
         tree.userData.currentHP = tree.userData.maxHP || 10;
     }
-
+    
     // Create health bar if it doesn't exist
     if (!tree.userData.healthBarSprite) {
         createHealthBar(tree);
     }
-
+    
     // Apply damage
     tree.userData.currentHP -= damage;
-
+    
     // Update health bar
     updateHealthBar(tree);
-
+    
     // Check if destroyed
     if (tree.userData.currentHP <= 0) {
         return true; // Tree is destroyed
     }
-
+    
     return false; // Tree still alive
 }
 
@@ -1634,9 +1525,8 @@ function dropBomb() {
     bombs.push({ mesh: bomb, velocity, alive: true });
     scene.add(bomb);
     lastBombTime = now;
-    SoundManager.playBombDrop();
     updateHUD(0);
-
+    
     // Show bomb tracker
     showBombTracker(bomb);
 }
@@ -1659,12 +1549,12 @@ function updateBombs(delta) {
         const groundY = getHeight(b.mesh.position.x, b.mesh.position.z);
         if (b.mesh.position.y <= groundY + 0.5) {
             createExplosion(b.mesh.position.clone(), 1.2);
-
+            
             // Schedule bomb tracker to hide after 2 seconds
             if (activeBomb === b.mesh) {
                 scheduleBombTrackerHide();
             }
-
+            
             scene.remove(b.mesh);
             b.mesh.traverse(obj => {
                 if (obj.geometry) obj.geometry.dispose();
@@ -1680,7 +1570,7 @@ function updateBombs(delta) {
         // Tree collisions (destructible) with 2x hitbox for bombs
         const { activeTrees, activeBaobabTrees } = terrainManager.getTrees();
         let treeHit = false;
-
+        
         // Regular trees
         for (let j = activeTrees.length - 1; j >= 0; j--) {
             const tree = activeTrees[j];
@@ -1709,12 +1599,12 @@ function updateBombs(delta) {
                 activeTrees.splice(j, 1);
                 points += POINTS_PER_TREE;
                 updateHUD();
-
+                
                 treeHit = true;
                 break;
             }
         }
-
+        
         // Baobab trees (Boss Trees)
         if (!treeHit) {
             for (let j = activeBaobabTrees.length - 1; j >= 0; j--) {
@@ -1739,7 +1629,7 @@ function updateBombs(delta) {
                 if (dist < hitRadius && b.mesh.position.y > tree.position.y - 2 && b.mesh.position.y < tree.position.y + hitHeight) {
                     // Damage boss tree (bombs do 3 HP damage)
                     const destroyed = damageTree(tree, 3);
-
+                    
                     if (destroyed) {
                         // Boss tree destroyed - HUGE explosion!
                         createExplosion(tree.position.clone().setY(tree.position.y + baseHeight / 2), 2.5);
@@ -1752,7 +1642,7 @@ function updateBombs(delta) {
                         // Still alive - medium hit effect
                         createExplosion(tree.position.clone().setY(tree.position.y + 5), 0.8);
                     }
-
+                    
                     treeHit = true;
                     break;
                 }
@@ -1764,7 +1654,7 @@ function updateBombs(delta) {
             if (activeBomb === b.mesh) {
                 scheduleBombTrackerHide();
             }
-
+            
             // Remove bomb
             scene.remove(b.mesh);
             b.mesh.traverse(obj => {
@@ -1782,42 +1672,42 @@ function updateBombs(delta) {
         const buildings = terrainManager.getBuildings ? terrainManager.getBuildings() : [];
         for (let j = buildings.length - 1; j >= 0; j--) {
             const bld = buildings[j];
-
+            
             // Ensure building matrix is up to date
             bld.updateMatrixWorld(true);
-
+            
             // Calculate bounding box with slight expansion
             const box = new THREE.Box3().setFromObject(bld);
             box.expandByScalar(0.5); // Add 0.5 unit padding for better hit detection
-
+            
             if (box.containsPoint(b.mesh.position)) {
                 // Fix any buildings with incorrect health values (old spawned buildings)
                 if (bld.userData.buildingType === 'ai' && bld.userData.health > bld.userData.maxHealth) {
                     console.log(`Bomb: Fixing corrupted health: ${bld.userData.health} -> ${bld.userData.maxHealth}`);
                     bld.userData.health = bld.userData.maxHealth;
                 }
-
+                
                 // Check if building has health (AI buildings)
                 if (bld.userData.health !== undefined && bld.userData.health > 1) {
                     // AI Building with health - damage it (bombs do 1 damage)
                     bld.userData.health -= 1;
                     console.log(`Bomb hit AI Building! Health remaining: ${bld.userData.health}`);
-
+                    
                     // Create health bar if it doesn't exist
                     if (!bld.userData.healthBarSprite) {
                         createBuildingHealthBar(bld);
                     }
-
+                    
                     // Update health bar
                     updateBuildingHealthBar(bld);
-
+                    
                     createExplosion(b.mesh.position.clone(), 0.75); // Bomb explosion
                 } else {
                     // Regular building OR AI building at 1 HP - destroy it
                     createExplosion(box.getCenter(new THREE.Vector3()), 0.75); // 50% smaller (was 1.5)
                     scene.remove(bld);
                     if (terrainManager.unregisterBuilding) terrainManager.unregisterBuilding(bld);
-
+                    
                     // Award points based on building type
                     if (bld.userData.buildingType === 'ai') {
                         points += POINTS_PER_AI_BUILDING;
@@ -1842,31 +1732,6 @@ function updateBombs(delta) {
                 });
                 bombs.splice(i, 1);
                 break;
-            }
-        }
-
-        // Tank collisions (bombs instantly kill tanks)
-        if (tankManager) {
-            const tanks = tankManager.getTanks();
-            for (let j = tanks.length - 1; j >= 0; j--) {
-                const tank = tanks[j];
-
-                // Check distance (bomb explosion radius ~5m)
-                const dx = b.mesh.position.x - tank.position.x;
-                const dz = b.mesh.position.z - tank.position.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-
-                // Also check height difference
-                const dy = Math.abs(b.mesh.position.y - tank.position.y);
-
-                if (dist < 15 && dy < 10) { // Within blast radius
-                    console.log("Tank destroyed by bomb!");
-
-                    createExplosion(tank.position.clone(), 2.0);
-                    tankManager.removeTank(j);
-                    points += POINTS_PER_TANK;
-                    updateHUD();
-                }
             }
         }
     }

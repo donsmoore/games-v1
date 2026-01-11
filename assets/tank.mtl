@@ -1,0 +1,30 @@
+# Tank MTL File
+# Materials for tank.obj
+
+# Chassis - Sea Green
+newmtl Chassis
+Kd 0.18 0.545 0.341
+Ka 0.1 0.1 0.1
+Ks 0.2 0.2 0.2
+Ns 50.0
+
+# Treads - Black
+newmtl Treads
+Kd 0.067 0.067 0.067
+Ka 0.05 0.05 0.05
+Ks 0.1 0.1 0.1
+Ns 20.0
+
+# Turret - Medium Sea Green
+newmtl Turret
+Kd 0.235 0.702 0.443
+Ka 0.1 0.1 0.1
+Ks 0.3 0.3 0.3
+Ns 60.0
+
+# Barrel - Dark Slate Gray
+newmtl Barrel
+Kd 0.184 0.310 0.310
+Ka 0.1 0.1 0.1
+Ks 0.4 0.4 0.4
+Ns 80.0
