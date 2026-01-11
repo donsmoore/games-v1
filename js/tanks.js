@@ -270,7 +270,7 @@ export class TankManager {
                 }
 
                 // Fire if in range, global cooldown allows, and player has taken off
-                const hasTakenOff = playerSpeed > 20 && playerAltitude > 5;
+                const hasTakenOff = playerSpeed > 15 && playerAltitude > 3;
                 if (distToPlayer < this.fireRange && this.globalFireTimer <= 0 && hasTakenOff) {
                     // Use barrel tip if available
                     const barrelTip = new THREE.Vector3();
