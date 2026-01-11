@@ -281,7 +281,22 @@ function animate() {
     }
 
     // Update game logic
+    let safeY = 0;
+    let runways = [];
     if (plane && !isCrashed) {
+        // Calculate Safe Minimum Altitude (Ground or Runway)
+        safeY = getHeight(plane.position.x, plane.position.z);
+        if (terrainManager) {
+            runways = terrainManager.getRunways();
+            for (const r of runways) {
+                const localP = plane.position.clone();
+                r.worldToLocal(localP);
+                if (Math.abs(localP.x) < 20 && Math.abs(localP.z) < 60) {
+                    safeY = Math.max(safeY, r.position.y + 15);
+                }
+            }
+        }
+
         if (isTaxiing) {
             updateTaxi(delta);
             // Simple camera follow during taxi (no look)
@@ -290,20 +305,6 @@ function animate() {
             camera.lookAt(plane.position);
         } else {
             terrainManager.update(plane.position);
-
-            // Calculate Safe Minimum Altitude (Ground or Runway)
-            let safeY = getHeight(plane.position.x, plane.position.z);
-            const runways = terrainManager.getRunways();
-            for (const r of runways) {
-                // Check if we are "above" this runway (XZ bounds)
-                // Convert plane pos to runway local space for accurate check
-                const localP = plane.position.clone();
-                r.worldToLocal(localP);
-                if (Math.abs(localP.x) < 20 && Math.abs(localP.z) < 60) {
-                    // Runway Surface world Y
-                    safeY = Math.max(safeY, r.position.y + 15);
-                }
-            }
 
             updateControls(plane, delta, safeY, laserEnergy, getBombChargePct(), updateHUD);
 
@@ -526,7 +527,10 @@ function animate() {
 
     // Update Tanks
     if (tankManager && plane) {
-        tankManager.update(delta, plane.position);
+        // Tanks only fire if player is > 20m/s and > 5m alt
+        const currentAltitude = plane.position.y - safeY;
+        const currentSpeedMS = planeSpeed * 40;
+        tankManager.update(delta, plane.position, currentSpeedMS, currentAltitude);
 
         // Check if tank projectiles hit the player
         if (!isCrashed && tankManager.checkPlayerHit(plane.position)) {

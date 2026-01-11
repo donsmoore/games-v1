@@ -215,7 +215,10 @@ export class TankManager {
         return false;
     }
 
-    update(delta, playerPos) {
+    update(delta, playerPos, playerSpeed = 100, playerAltitude = 100) {
+        // playerSpeed and playerAltitude are used to determine if the player has "taken off"
+        // Default values of 100 ensure tanks still fire in scenes where these aren't passed (if any)
+
         // Initial spawn
         this.initialSpawn(playerPos);
 
@@ -266,8 +269,9 @@ export class TankManager {
                     tank.userData.barrel.rotation.x = -launchAngle;
                 }
 
-                // Fire if in range and global cooldown allows
-                if (distToPlayer < this.fireRange && this.globalFireTimer <= 0) {
+                // Fire if in range, global cooldown allows, and player has taken off
+                const hasTakenOff = playerSpeed > 20 && playerAltitude > 5;
+                if (distToPlayer < this.fireRange && this.globalFireTimer <= 0 && hasTakenOff) {
                     // Use barrel tip if available
                     const barrelTip = new THREE.Vector3();
                     if (tank.userData.barrel) {
