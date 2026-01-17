@@ -120,7 +120,7 @@ export class TerrainManager {
     getBuildings() {
         return this.activeBuildings;
     }
-    
+
     unregisterTree(tree) {
         this.activeTrees = this.activeTrees.filter(t => t !== tree);
         if (tree.userData && tree.userData.chunk) {
@@ -129,7 +129,7 @@ export class TerrainManager {
             if (idx >= 0) arr.splice(idx, 1);
         }
     }
-    
+
     unregisterBaobabTree(tree) {
         this.activeBaobabTrees = this.activeBaobabTrees.filter(t => t !== tree);
         if (tree.userData && tree.userData.chunk) {
@@ -520,7 +520,7 @@ class Chunk {
         const runwaysForCheckTrees = this.manager ? this.manager.globalRunways : [];
         if (treeModel) {
             const minRunwayDistance = 100; // Increased from 50m to 100m
-            
+
             for (let i = 0; i < 20; i++) {
                 const tLocalX = (Math.random() - 0.5) * size;
                 const tLocalZ = (Math.random() - 0.5) * size;
@@ -534,13 +534,13 @@ class Chunk {
                     const dx = tx - runway.position.x;
                     const dz = tz - runway.position.z;
                     const dist = Math.sqrt(dx * dx + dz * dz);
-                    
+
                     if (dist < minRunwayDistance) {
                         tooCloseToRunway = true;
                         break;
                     }
                 }
-                
+
                 if (tooCloseToRunway) continue;
 
                 const ty = getHeight(tx, tz);
@@ -548,19 +548,19 @@ class Chunk {
                     // Random Tree Type - equal distribution
                     let tree;
                     const treeTypes = [];
-                    
+
                     // Build available tree types array
                     if (this.treeModel) treeTypes.push(this.treeModel);
                     if (this.roundTreeModel) treeTypes.push(this.roundTreeModel);
                     if (this.palmTreeModel) treeTypes.push(this.palmTreeModel);
                     if (this.mushroomTreeModel) treeTypes.push(this.mushroomTreeModel);
                     if (this.lowpolyTreeModel) treeTypes.push(this.lowpolyTreeModel);
-                    
+
                     // Pick random tree type
                     if (treeTypes.length > 0) {
                         const randomType = treeTypes[Math.floor(Math.random() * treeTypes.length)];
                         tree = randomType.clone(true); // Deep clone to preserve materials
-                        
+
                         // CRITICAL: Three.js clone() doesn't deep copy userData!
                         // We MUST manually copy it
                         tree.userData = Object.assign({}, randomType.userData || {});
@@ -574,7 +574,7 @@ class Chunk {
                     // Use multiplyScalar to preserve the model's base scale
                     const s = 0.5 + Math.random() * 0.5;
                     tree.scale.multiplyScalar(s);
-                    
+
                     // Store reference to chunk for unregistering
                     tree.userData.chunk = this;
 
@@ -657,12 +657,12 @@ class Chunk {
             const minSpacing = 40; // Minimum distance from other objects
             const runwaysForCheckBaobab = this.manager ? this.manager.globalRunways : [];
             const minRunwayDistance = 100; // Increased from 50m to 100m
-            
+
             for (let i = 0; i < 10; i++) {
                 let attempts = 0;
                 let validPosition = false;
                 let tx, tz, ty;
-                
+
                 // Try up to 20 times to find a valid position
                 while (!validPosition && attempts < 20) {
                     const tLocalX = (Math.random() - 0.5) * size;
@@ -677,13 +677,13 @@ class Chunk {
                         const dx = tx - runway.position.x;
                         const dz = tz - runway.position.z;
                         const dist = Math.sqrt(dx * dx + dz * dz);
-                        
+
                         if (dist < minRunwayDistance) {
                             tooCloseToRunway = true;
                             break;
                         }
                     }
-                    
+
                     if (tooCloseToRunway) {
                         attempts++;
                         continue;
@@ -694,65 +694,69 @@ class Chunk {
                         attempts++;
                         continue; // In water
                     }
-                    
+
                     // Check collision with existing regular trees
                     let tooClose = false;
                     for (const existingTree of this.trees) {
                         const dx = tx - existingTree.position.x;
                         const dz = tz - existingTree.position.z;
                         const dist = Math.sqrt(dx * dx + dz * dz);
-                        
+
                         if (dist < minSpacing) {
                             tooClose = true;
                             break;
                         }
                     }
-                    
+
                     // Check collision with existing baobab trees
                     if (!tooClose) {
                         for (const existingBaobab of this.baobabTrees) {
                             const dx = tx - existingBaobab.position.x;
                             const dz = tz - existingBaobab.position.z;
                             const dist = Math.sqrt(dx * dx + dz * dz);
-                            
+
                             if (dist < baobabRadius * 2 + minSpacing) {
                                 tooClose = true;
                                 break;
                             }
                         }
                     }
-                    
+
                     // Check collision with buildings
                     if (!tooClose) {
                         for (const building of this.buildings) {
                             const dx = tx - building.position.x;
                             const dz = tz - building.position.z;
                             const dist = Math.sqrt(dx * dx + dz * dz);
-                            
+
                             if (dist < minSpacing + 20) { // Buildings need more space
                                 tooClose = true;
                                 break;
                             }
                         }
                     }
-                    
+
                     if (!tooClose) {
                         validPosition = true;
                     }
-                    
+
                     attempts++;
                 }
-                
+
                 // Only spawn if we found a valid position
                 if (validPosition) {
                     const tree = this.baobabTreeModel.clone(true); // Deep clone to preserve materials
                     tree.position.set(tx, ty, tz);
 
                     // No scale variation for boss trees - keep them impressively large
-                    
+
+                    // CRITICAL: Copy userData from original model (THREE.js clone doesn't copy userData)
+                    tree.userData = Object.assign({}, this.baobabTreeModel.userData);
+                    // Reset HP for this instance (each tree starts with full HP)
+                    tree.userData.currentHP = tree.userData.maxHP || 10;
                     // Store reference to chunk for unregistering
                     tree.userData.chunk = this;
-                    
+
                     scene.add(tree);
                     this.baobabTrees.push(tree);
                 }
@@ -852,14 +856,14 @@ class Chunk {
             while (attempts < 10) {
                 const bx = cx * size + (Math.random() - 0.5) * 200;
                 const bz = cz * size + (Math.random() - 0.5) * 200;
-                
+
                 // Check runway distance
                 let tooClose = false;
                 for (const r of runwaysForCheckBuildings) {
                     const dist = Math.hypot(bx - r.position.x, bz - r.position.z);
                     if (dist < 100) { tooClose = true; break; }
                 }
-                
+
                 if (!tooClose) {
                     const groundY = getHeight(bx, bz);
                     if (groundY > -2) {
@@ -867,7 +871,7 @@ class Chunk {
                         break; // Successfully placed, exit loop
                     }
                 }
-                
+
                 attempts++;
             }
         }
@@ -877,79 +881,79 @@ class Chunk {
             const runwaysForCheckAI = this.manager ? this.manager.globalRunways : [];
             const minRunwayDistance = 100; // Keep away from runways
             const numClusters = 1 + Math.floor(Math.random() * 2); // 1 or 2 clusters per chunk
-            
+
             for (let cluster = 0; cluster < numClusters; cluster++) {
                 // Pick a cluster center
                 let clusterCenterX, clusterCenterZ;
                 let validClusterCenter = false;
                 let attempts = 0;
-                
+
                 while (!validClusterCenter && attempts < 10) {
                     const cLocalX = (Math.random() - 0.5) * size * 0.7;
                     const cLocalZ = (Math.random() - 0.5) * size * 0.7;
-                    
+
                     clusterCenterX = (cx * size) + cLocalX;
                     clusterCenterZ = (cz * size) + cLocalZ;
-                    
+
                     // Check distance from runways
                     let tooCloseToRunway = false;
                     for (const runway of runwaysForCheckAI) {
                         const dx = clusterCenterX - runway.position.x;
                         const dz = clusterCenterZ - runway.position.z;
                         const dist = Math.sqrt(dx * dx + dz * dz);
-                        
+
                         if (dist < minRunwayDistance) {
                             tooCloseToRunway = true;
                             break;
                         }
                     }
-                    
+
                     if (!tooCloseToRunway) {
                         validClusterCenter = true;
                     } else {
                         attempts++;
                     }
                 }
-                
+
                 if (!validClusterCenter) continue; // Skip this cluster if no valid center found
-                
+
                 // Now spawn 3-10 buildings around this cluster center
                 const buildingsInCluster = 3 + Math.floor(Math.random() * 8); // 3 to 10 buildings
-                
+
                 for (let i = 0; i < buildingsInCluster; i++) {
                     let attempts = 0;
                     let validPosition = false;
                     let bx, bz, by;
-                    
+
                     // Pick a random AI building model
                     const randomAIModel = this.aiBuildings[Math.floor(Math.random() * this.aiBuildings.length)];
-                    
+
                     while (!validPosition && attempts < 10) {
                         // Place within 80 units of cluster center
                         const angle = Math.random() * Math.PI * 2;
                         const radius = 20 + Math.random() * 60; // 20-80 units from center
-                        
+
                         bx = clusterCenterX + Math.cos(angle) * radius;
                         bz = clusterCenterZ + Math.sin(angle) * radius;
-                        
+
                         // Check collision with existing buildings in THIS cluster only (closer spacing)
                         let tooCloseToBuilding = false;
                         for (const existing of this.buildings) {
                             const dx = bx - existing.position.x;
                             const dz = bz - existing.position.z;
                             const dist = Math.sqrt(dx * dx + dz * dz);
-                            
+
                             if (dist < 30) { // Much closer spacing within cluster (was 70)
                                 tooCloseToBuilding = true;
                                 break;
                             }
                         }
-                        
+
                         if (tooCloseToBuilding) {
                             attempts++;
                             continue;
                         }
-                        
+
                         by = getHeight(bx, bz);
                         if (by > -2) {
                             validPosition = true;
@@ -957,14 +961,14 @@ class Chunk {
                             attempts++;
                         }
                     }
-                    
+
                     if (validPosition) {
                         const building = randomAIModel.clone(true); // Deep clone to preserve materials
                         building.position.set(bx, by, bz);
-                        
+
                         // Update matrix for proper bounding box calculation
                         building.updateMatrixWorld(true);
-                        
+
                         // Copy pre-calculated bounding box from the original model
                         if (randomAIModel.userData.baseHalfExtents) {
                             building.userData.halfExtents = { ...randomAIModel.userData.baseHalfExtents };
@@ -975,17 +979,17 @@ class Chunk {
                             box.getSize(size);
                             building.userData.halfExtents = { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 };
                         }
-                        
+
                         // Copy building properties from the original model
                         building.userData.buildingType = randomAIModel.userData.buildingType || 'ai';
                         building.userData.buildingNumber = randomAIModel.userData.buildingNumber;
                         building.userData.health = 5; // Force to 5 HP
                         building.userData.maxHealth = 5; // Force to 5 max HP
                         building.userData.chunk = this;
-                        
+
                         building.castShadow = true;
                         building.receiveShadow = true;
-                        
+
                         scene.add(building);
                         this.buildings.push(building);
                         if (this.manager) this.manager.registerBuilding(building);

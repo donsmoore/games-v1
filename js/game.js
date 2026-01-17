@@ -4,7 +4,8 @@ import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuild
 import { updateControls, getPlaneObject, resetSpeed, planeSpeed } from './controls.js?v=9';
 import { ACTIVE_JET, getActiveJetConfig, getCannonPositions } from './jetconfig.js?v=1';
 import { SoundManager } from './audio.js?v=2';
-import { TankManager } from './tanks.js?v=1';
+import { TankManager } from './tanks.js?v=2';
+import { AIPlaneManager } from './ai_planes.js?v=2';
 
 // Global variables
 let camera, scene, renderer;
@@ -17,6 +18,7 @@ let terrainManager;
 let bombTrackerRenderer = null;
 let bombTrackerCamera = null;
 let bombTrackerContainer = null;
+let tankModelAsset, f16ModelAsset;
 let activeBomb = null; // Currently tracked bomb
 let bombTrackerHideTime = null; // When to hide the tracker
 
@@ -44,12 +46,83 @@ let reticleCanvas, reticleCtx;
 const RETICLE_FORWARD = 200; // distance ahead of plane
 const RETICLE_UP = 2;       // lowered by 5 units
 const POINTS_PER_TREE = 1;
-const POINTS_PER_BUILDING = 3;
-const POINTS_PER_AI_BUILDING = 5;
-const POINTS_PER_TANK = 10;
+const POINTS_PER_BAOBAB = 4;
+const POINTS_PER_BUILDING_SMALL = 2; // Building 2, 3, 5
+const POINTS_PER_BUILDING_GENERAL = 5; // All other buildings
+const POINTS_PER_TANK = 5;
+const POINTS_PER_AI_PLANE = 10;
 
-// Tank Manager
+// Tank & AI Managers
 let tankManager;
+let aiPlaneManager;
+
+// Floating Score Popups
+let scorePopups = [];
+
+class FloatingText {
+    constructor(position, text) {
+        this.position = position.clone();
+
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 256;
+
+        context.font = 'Bold 120px Arial';
+        context.fillStyle = '#FFD700'; // Gold
+        context.strokeStyle = '#000000'; // Solid Black
+        context.lineWidth = 12; // Thicker outline for visibility
+        context.lineJoin = 'round'; // Smoother outline
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.strokeText(text, 256, 128);
+        context.fillText(text, 256, 128);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true
+        });
+        this.sprite = new THREE.Sprite(material);
+        this.sprite.position.copy(this.position);
+        this.sprite.position.y += 10; // Start higher above ground/object
+
+        // Initial scale
+        this.initialScale = 15;
+        this.sprite.scale.set(this.initialScale, this.initialScale * 0.5, 1);
+
+        this.age = 0;
+        this.maxAge = 2.0; // Seconds
+
+        scene.add(this.sprite);
+    }
+
+    update(delta) {
+        this.age += delta;
+        const lifeRatio = this.age / this.maxAge;
+
+        // Move up
+        this.sprite.position.y += delta * 20;
+
+        // Expand
+        const scale = this.initialScale * (1 + lifeRatio * 1.5);
+        this.sprite.scale.set(scale, scale * 0.5, 1);
+
+        // Fade out
+        this.sprite.material.opacity = Math.max(0, 1 - lifeRatio);
+
+        if (this.age >= this.maxAge) {
+            scene.remove(this.sprite);
+            return false;
+        }
+        return true;
+    }
+}
+
+function createScorePopup(position, scorePoints) {
+    if (scorePoints <= 0) return;
+    scorePopups.push(new FloatingText(position, `+${scorePoints}`));
+}
 
 init();
 // Animation handled inside init via requestAnimationFrame on load
@@ -58,7 +131,7 @@ async function init() {
     // Scene setup
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Sky blue
-    scene.fog = new THREE.Fog(0x87CEEB, 200, 900); // Changed 1000 to 900
+    scene.fog = new THREE.Fog(0x87CEEB, 300, 2500); // Massive visual range for dogfighting
 
     // Camera setup
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -101,7 +174,8 @@ async function init() {
     const building2 = await loadBuilding(2);
     const building3 = await loadBuilding(3);
     const building5 = await loadBuilding(5);
-    const tankModel = await loadTank();
+    tankModelAsset = await loadTank();
+    f16ModelAsset = await loadF16();
 
     // Load AI buildings
     const aiBuildings = [];
@@ -110,7 +184,7 @@ async function init() {
     }
 
     console.log(`✓ All assets loaded successfully!`);
-    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}, Tanks: ${tankModel ? '✓' : '✗'}`);
+    console.log(`  Trees: ${treeModel ? '✓' : '✗'}, Buildings: ${building2 ? '✓' : '✗'}, AI Buildings: ${aiBuildings.length}, Tanks: ${tankModelAsset ? '✓' : '✗'}`);
 
     // Hide loading overlay
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -221,7 +295,12 @@ async function init() {
     setupBombTracker();
 
     // Initialize Tank Manager (with terrainManager for collision detection and OBJ model)
-    tankManager = new TankManager(scene, terrainManager, tankModel);
+    tankManager = new TankManager(scene, terrainManager, tankModelAsset);
+    aiPlaneManager = new AIPlaneManager(scene, terrainManager, f16ModelAsset);
+
+    // Expose to window for debugging
+    window.tankManager = tankManager;
+    window.aiPlaneManager = aiPlaneManager;
 
     // Start loop
     animate();
@@ -525,6 +604,13 @@ function animate() {
     updateBombs(delta);
     updateHUD(getBombChargePct());
 
+    // Update Score Popups
+    for (let i = scorePopups.length - 1; i >= 0; i--) {
+        if (!scorePopups[i].update(delta)) {
+            scorePopups.splice(i, 1);
+        }
+    }
+
     // Update Tanks
     if (tankManager && plane) {
         // Tanks only fire if player is > 20m/s and > 5m alt
@@ -532,9 +618,21 @@ function animate() {
         const currentSpeedMS = planeSpeed * 40;
         tankManager.update(delta, plane.position, currentSpeedMS, currentAltitude);
 
-        // Check if tank projectiles hit the player
         if (!isCrashed && tankManager.checkPlayerHit(plane.position)) {
             console.log("Hit by tank round!");
+            triggerCrash();
+        }
+    }
+
+    // Update AI Planes
+    if (aiPlaneManager && plane) {
+        const currentAltitude = plane.position.y - (typeof safeY !== 'undefined' ? safeY : 0);
+        const currentSpeedMS = planeSpeed * 40;
+        aiPlaneManager.update(delta, plane.position, currentSpeedMS, currentAltitude);
+
+        // Check if AI plane lasers hit player
+        if (!isCrashed && aiPlaneManager.checkPlayerHit()) {
+            console.log("Hit by AI F16 laser!");
             triggerCrash();
         }
     }
@@ -701,12 +799,12 @@ function updateHUD(bombCharge = null) {
         if (bombVal) bombVal.innerText = `${Math.round(bombCharge)}%`;
     }
 
-    // Points slider (0-20)
+    // Points slider (0-200)
     const ptsBar = document.getElementById('points-bar');
     const ptsVal = document.getElementById('points-val');
-    const clamped = Math.max(0, Math.min(20, points));
-    if (ptsBar) ptsBar.style.width = `${(clamped / 20) * 100}%`;
-    if (ptsVal) ptsVal.innerText = `${clamped} / 20`;
+    const clamped = Math.max(0, Math.min(200, points));
+    if (ptsBar) ptsBar.style.width = `${(clamped / 200) * 100}%`;
+    if (ptsVal) ptsVal.innerText = `${clamped} / 200`;
 }
 
 function drawMinimap() {
@@ -1208,6 +1306,7 @@ function updateBullets(delta) {
                 terrainManager.unregisterTree(tree);
                 activeTrees.splice(j, 1);
                 points += POINTS_PER_TREE;
+                createScorePopup(tree.position, POINTS_PER_TREE);
                 updateHUD();
 
                 hit = true;
@@ -1247,13 +1346,18 @@ function updateBullets(delta) {
                         // Boss tree destroyed - BIG explosion!
                         const explosionPos = tree.position.clone();
                         explosionPos.y += baseHeight / 2; // Middle of tree
-                        createExplosion(explosionPos, 2.5); // 2.5x size explosion!
+                        createExplosion(explosionPos, 0.75); // Reduced (30% of 2.5)
+
+                        // Capture popup position BEFORE removing tree
+                        const baobabPopupPos1 = tree.position.clone();
+                        baobabPopupPos1.y += 50;
 
                         // Remove tree
                         scene.remove(tree);
                         terrainManager.unregisterBaobabTree(tree);
                         activeBaobabTrees.splice(j, 1);
-                        points += POINTS_PER_TREE * 10; // 10x points for boss tree!
+                        points += POINTS_PER_BAOBAB;
+                        createScorePopup(baobabPopupPos1, POINTS_PER_BAOBAB);
                         updateHUD();
                     } else {
                         // Still alive - small hit effect
@@ -1314,9 +1418,11 @@ function updateBullets(delta) {
 
                     // Award points based on building type
                     if (bld.userData.buildingType === 'ai') {
-                        points += POINTS_PER_AI_BUILDING;
+                        points += POINTS_PER_BUILDING_GENERAL;
+                        const bldPopupPos1 = bld.position.clone(); bldPopupPos1.y += 20; createScorePopup(bldPopupPos1, POINTS_PER_BUILDING_GENERAL);
                     } else {
-                        points += POINTS_PER_BUILDING;
+                        points += POINTS_PER_BUILDING_SMALL;
+                        const bldPopupPos2 = bld.position.clone(); bldPopupPos2.y += 20; createScorePopup(bldPopupPos2, POINTS_PER_BUILDING_SMALL);
                     }
                     updateHUD();
                     hit = true;
@@ -1341,15 +1447,41 @@ function updateBullets(delta) {
 
                     if (tank.userData.health <= 0) {
                         // Destroy tank
-                        createExplosion(tank.position.clone(), 1.5);
+                        createExplosion(tank.position.clone(), 0.45); // Reduced (30% of 1.5)
                         tankManager.removeTank(j);
                         points += POINTS_PER_TANK;
+                        createScorePopup(tank.position, POINTS_PER_TANK);
                         updateHUD();
                     } else {
                         // Small hit effect
                         createExplosion(b.mesh.position.clone(), 0.3);
                     }
 
+                    hit = true;
+                    break;
+                }
+            }
+        }
+
+        // AI Plane collisions
+        if (!hit && aiPlaneManager) {
+            const planes = aiPlaneManager.getPlanes();
+            for (let j = planes.length - 1; j >= 0; j--) {
+                const aiPlane = planes[j];
+                const d = b.mesh.position.distanceTo(aiPlane.position);
+                if (d < 30) {
+                    console.log("AI F16 hit by laser!");
+                    aiPlane.userData.health -= 1;
+                    if (aiPlane.userData.health <= 0) {
+                        // Destroy AI plane
+                        createExplosion(aiPlane.position.clone(), 0.8);
+                        aiPlaneManager.removePlane(j);
+                        points += POINTS_PER_AI_PLANE;
+                        createScorePopup(aiPlane.position, POINTS_PER_AI_PLANE);
+                        updateHUD();
+                    } else {
+                        createExplosion(b.mesh.position.clone(), 0.5);
+                    }
                     hit = true;
                     break;
                 }
@@ -1712,6 +1844,7 @@ function updateBombs(delta) {
                 terrainManager.unregisterTree(tree);
                 activeTrees.splice(j, 1);
                 points += POINTS_PER_TREE;
+                createScorePopup(tree.position, POINTS_PER_TREE);
                 updateHUD();
 
                 treeHit = true;
@@ -1745,12 +1878,18 @@ function updateBombs(delta) {
                     const destroyed = damageTree(tree, 3);
 
                     if (destroyed) {
-                        // Boss tree destroyed - HUGE explosion!
-                        createExplosion(tree.position.clone().setY(tree.position.y + baseHeight / 2), 2.5);
+                        // Boss tree destroyed - reduced size
+                        createExplosion(tree.position.clone().setY(tree.position.y + baseHeight / 2), 0.75); // Reduced (30% of 2.5)
+
+                        // Capture popup position BEFORE removing tree
+                        const baobabPopupPos2 = tree.position.clone();
+                        baobabPopupPos2.y += 50;
+
                         scene.remove(tree);
                         terrainManager.unregisterBaobabTree(tree);
                         activeBaobabTrees.splice(j, 1);
-                        points += POINTS_PER_TREE * 10; // 10x points for boss tree!
+                        points += POINTS_PER_BAOBAB;
+                        createScorePopup(baobabPopupPos2, POINTS_PER_BAOBAB);
                         updateHUD();
                     } else {
                         // Still alive - medium hit effect
@@ -1824,9 +1963,11 @@ function updateBombs(delta) {
 
                     // Award points based on building type
                     if (bld.userData.buildingType === 'ai') {
-                        points += POINTS_PER_AI_BUILDING;
+                        points += POINTS_PER_BUILDING_GENERAL;
+                        const bldPopupPos3 = bld.position.clone(); bldPopupPos3.y += 20; createScorePopup(bldPopupPos3, POINTS_PER_BUILDING_GENERAL);
                     } else {
-                        points += POINTS_PER_BUILDING;
+                        points += POINTS_PER_BUILDING_SMALL;
+                        const bldPopupPos4 = bld.position.clone(); bldPopupPos4.y += 20; createScorePopup(bldPopupPos4, POINTS_PER_BUILDING_SMALL);
                     }
                     updateHUD();
                 }
@@ -1866,9 +2007,10 @@ function updateBombs(delta) {
                 if (dist < 15 && dy < 10) { // Within blast radius
                     console.log("Tank destroyed by bomb!");
 
-                    createExplosion(tank.position.clone(), 2.0);
+                    createExplosion(tank.position.clone(), 0.6); // Reduced (30% of 2.0)
                     tankManager.removeTank(j);
                     points += POINTS_PER_TANK;
+                    createScorePopup(tank.position, POINTS_PER_TANK);
                     updateHUD();
                 }
             }
