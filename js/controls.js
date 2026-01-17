@@ -17,6 +17,13 @@ let keys = {
     Control: false
 };
 
+// Reset all keys to unpressed state
+export function resetKeys() {
+    for (let key in keys) {
+        keys[key] = false;
+    }
+}
+
 window.addEventListener('keydown', (e) => {
     if (keys.hasOwnProperty(e.key) || e.key === "Shift" || e.key === "Control") keys[e.key] = true;
 });
@@ -25,12 +32,17 @@ window.addEventListener('keyup', (e) => {
     if (keys.hasOwnProperty(e.key) || e.key === "Shift" || e.key === "Control") keys[e.key] = false;
 });
 
+// Clear all keys when window loses focus to prevent stuck inputs
+window.addEventListener('blur', () => {
+    resetKeys();
+});
+
 export function getPlaneObject() {
     // Just a helper if needed
 }
 
 
-export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 100, bombChargePct = null, onHUD = () => {}) {
+export function updateControls(plane, delta, minAlt = -Infinity, laserEnergy = 100, bombChargePct = null, onHUD = () => { }) {
     if (!plane) return;
 
     // Throttle
