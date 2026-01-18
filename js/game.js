@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TerrainManager, getHeight } from './terrain.js?v=33';
 import { loadF16, loadA10, loadTree, loadRoundTree, loadRunwayTexture, loadBuilding, loadPalmTree, loadMushroomTree, loadBaobabTree, loadLowpolyTree, loadAIBuilding, loadTank } from './assets.js?v=224';
-import { updateControls, getPlaneObject, resetSpeed, planeSpeed, resetKeys } from './controls.js?v=9';
+import { updateControls, getPlaneObject, resetSpeed, planeSpeed, resetKeys } from './controls.js?v=10';
 import { ACTIVE_JET, getActiveJetConfig, getCannonPositions } from './jetconfig.js?v=1';
 import { SoundManager } from './audio.js?v=2';
 import { TankManager } from './tanks.js?v=2';
